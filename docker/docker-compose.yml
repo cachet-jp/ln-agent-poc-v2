@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # === Bitcoin Core (Mainnet) ===
+  bitcoind:
+    image: lncm/bitcoind:v27.0
+    container_name: bitcoind-mainnet
+    volumes:
+      - bitcoin_data:/data/.bitcoin
+      - ./bitcoin.conf:/data/.bitcoin/bitcoin.conf:ro
+    ports:
+      - "8333:8333"    # P2P (public)
+    expose:
+      - "8332"         # RPC (internal only)
+      - "28332"        # ZMQ block
+      - "28333"        # ZMQ tx
+    restart: unless-stopped
+    mem_limit: 4g
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # === LND (Mainnet) ===
+  lnd:
+    image: lightninglabs/lnd:v0.18.0-beta
+    container_name: lnd-mainnet
+    depends_on:
+      - bitcoind
+    volumes:
+      - lnd_data:/root/.lnd
+      - ./lnd.conf:/root/.lnd/lnd.conf:ro
+    ports:
+      - "9735:9735"    # LN P2P (public)
+      - "10009:10009"  # gRPC (restricted via SG)
+      - "8080:8080"    # REST (restricted via SG)
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # === OpenClaw Agent ===
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw-agent
+    depends_on:
+      - lnd
+    env_file: .env
+    volumes:
+      - lnd_data:/lnd:ro           # macaroon / tls cert 参照用
+      - ./openclaw-config:/app/config
+      - /var/log/ln-agent/agent:/var/log/openclaw
+    ports:
+      - "8081:8081"    # Health check / admin (restricted via SG)
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  bitcoin_data:
+    driver: local
+  lnd_data:
+    driver: local
