@@ -42,12 +42,30 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # === signal-cli REST API ===
+  signal-cli:
+    image: bbernhard/signal-cli-rest-api:latest
+    container_name: signal-cli
+    volumes:
+      - signal_data:/home/.local/share/signal-cli
+    expose:
+      - "8080"         # REST API (internal only, openclaw connects here)
+    environment:
+      - MODE=json-rpc  # required for OpenClaw
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
   # === OpenClaw Agent ===
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-agent
     depends_on:
       - lnd
+      - signal-cli
     env_file: .env
     volumes:
       - lnd_data:/lnd:ro           # macaroon / tls cert 参照用
@@ -66,4 +84,6 @@ volumes:
   bitcoin_data:
     driver: local
   lnd_data:
+    driver: local
+  signal_data:
     driver: local

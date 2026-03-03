@@ -12,6 +12,22 @@ echo ""
 
 AGENT_NAME="${1:-agent}"
 
+# --- claude CLI のインストール (OAuth 認証 — API キー不要) ---
+if ! command -v claude &>/dev/null; then
+  echo "[0/7] Installing claude CLI..."
+  # Node.js 20 が必要
+  if ! command -v node &>/dev/null || [[ "$(node -e 'console.log(parseInt(process.versions.node))')" -lt 20 ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - >/dev/null 2>&1
+    sudo apt-get install -y nodejs >/dev/null 2>&1
+  fi
+  sudo npm install -g @anthropic-ai/claude-code >/dev/null 2>&1
+  echo "✅ claude CLI installed"
+  echo "   Run 'claude login' after setup to authenticate via OAuth (no API key needed)"
+else
+  echo "[0/7] claude CLI already installed: $(claude --version 2>/dev/null || echo 'ok')"
+fi
+echo ""
+
 # --- bitcoin.conf のパスワード設定 ---
 BTC_RPC_PASS=$(openssl rand -hex 32)
 echo "[1/7] Setting Bitcoin RPC password..."
@@ -28,11 +44,7 @@ if [ ! -f ".env" ]; then
   echo "[3/7] Creating .env from example..."
   cp .env.example .env
   sed -i "s/ln-agent-kohei/ln-agent-${AGENT_NAME}/g" .env
-  echo ""
-  echo "⚠️  Edit .env to set your LLM_API_KEY:"
-  echo "  nano .env"
-  echo ""
-  read -p "Press Enter after editing .env..."
+  echo "✅ .env created (no API key needed — claude CLI uses OAuth)"
 else
   echo "[3/7] .env already exists, skipping"
 fi
@@ -85,6 +97,8 @@ echo ""
 echo "=== Setup complete! ==="
 echo ""
 echo "Next steps:"
+echo "  0. Login to claude CLI via OAuth (no API key needed):"
+echo "     claude login"
 echo "  1. Wait for Bitcoin Core IBD to complete (1-3 days)"
 echo "     Monitor: docker exec bitcoind-mainnet bitcoin-cli -rpcuser=bitcoinrpc -rpcpassword='$BTC_RPC_PASS' getblockchaininfo"
 echo "  2. Wait for LND to sync (after IBD)"
@@ -94,6 +108,9 @@ echo "     docker exec lnd-mainnet lncli newaddress p2tr"
 echo "  4. Send BTC to that address"
 echo "  5. Start OpenClaw:"
 echo "     docker-compose up -d openclaw"
+echo ""
+echo "Using claude as your agent:"
+echo "  claude   # starts interactive session — can run docker exec lncli commands"
 echo ""
 echo "Channel backup cron (add to crontab):"
 echo '  0 */6 * * * docker exec lnd-mainnet lncli exportchanbackup --all > /tmp/channel.backup && aws s3 cp /tmp/channel.backup s3://ln-agent-poc-$(aws sts get-caller-identity --query Account --output text)/backups/$(date +\%Y\%m\%d_\%H\%M\%S)_channel.backup --region ap-northeast-1'
