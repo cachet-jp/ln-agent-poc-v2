@@ -9,10 +9,12 @@
         "-L", "18789:localhost:18789",
         "-L", "8081:localhost:8081",
         "ubuntu@${LN_AGENT_IP}",
-        "docker exec -i openclaw-agent /usr/local/bin/openclaw-mcp"
+        "docker", "exec", "-i", "openclaw-agent",
+        "openclaw", "acp",
+        "--token", "<YOUR_OPENCLAW_ACP_TOKEN>"
       ],
       "env": {
-        "LN_AGENT_IP": "35.77.192.237"
+        "LN_AGENT_IP": "<YOUR_EC2_IP>"
       }
     }
   }
