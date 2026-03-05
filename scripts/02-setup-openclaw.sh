@@ -26,22 +26,14 @@ if ! docker exec lnd-mainnet lncli getinfo >/dev/null 2>&1; then
 fi
 echo "✅ LND is running and wallet is unlocked"
 
-# --- .env の LLM_API_KEY チェック ---
+# --- .env の存在チェック ---
 echo "[2/6] Checking .env configuration..."
 if [ ! -f ".env" ]; then
   echo "ERROR: .env file not found. Run 01-setup-node.sh first."
   exit 1
 fi
-
-if grep -q '<YOUR_ANTHROPIC_API_KEY>' .env; then
-  echo ""
-  echo "⚠️  LLM_API_KEY is not set in .env!"
-  echo "  Edit .env to set your Anthropic API key:"
-  echo "    nano .env"
-  echo ""
-  read -p "Press Enter after editing .env..."
-fi
-echo "✅ .env configured"
+echo "✅ .env found"
+echo "   (LLM auth: use 'claude login' for OAuth — no API key required)"
 
 # --- LND TLS cert / macaroon の存在確認 ---
 echo "[3/6] Verifying LND credentials..."
