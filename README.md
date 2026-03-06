@@ -7,30 +7,86 @@ AWS 上に LND + Bitcoin Core + OpenClaw を構築し、AI エージェント経
 
 ```
 ln-agent-poc/
-├── terraform/           # AWS インフラ (IaC)
-│   ├── main.tf          # Provider / backend
-│   ├── variables.tf     # 変数定義
-│   ├── vpc.tf           # VPC / Subnet
-│   ├── security.tf      # SG / IAM
-│   ├── compute.tf       # EC2 / EIP
-│   ├── storage.tf       # S3 / Secrets Manager
-│   ├── monitoring.tf    # CloudWatch / SNS
-│   ├── outputs.tf       # 出力値
-│   ├── userdata.sh      # EC2 bootstrap
+├── terraform/               # AWS インフラ (IaC)
+│   ├── main.tf              # Provider / backend
+│   ├── variables.tf         # 変数定義
+│   ├── vpc.tf               # VPC / Subnet
+│   ├── security.tf          # SG / IAM
+│   ├── compute.tf           # EC2 / EIP
+│   ├── storage.tf           # S3 / Secrets Manager
+│   ├── monitoring.tf        # CloudWatch / SNS
+│   ├── outputs.tf           # 出力値
+│   ├── userdata.sh          # EC2 bootstrap
 │   └── terraform.tfvars.example
-├── docker/              # コンテナ設定
+├── purchasing-agent/        # Phase 1: AI 購入エージェント (MCP ツール)
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── .env.example
+│   └── src/
+│       ├── server.ts        # MCP サーバー (stdio transport)
+│       ├── types.ts         # 共通型定義
+│       ├── tools/
+│       │   ├── ark-wallet.ts    # Ark ウォレット操作
+│       │   ├── usebitcoin.ts    # V-Preca 購入 (Lightning 支払い)
+│       │   └── amazon.ts       # Amazon 購入
+│       └── lib/
+│           ├── clw-client.ts    # clw.cash SDK ラッパー
+│           ├── browser.ts       # Playwright ヘルパー
+│           └── config.ts        # 設定管理 (zod validation)
+├── docker/                  # コンテナ設定
 │   ├── docker-compose.yml
-│   ├── bitcoin.conf     # Bitcoin Core Mainnet
-│   ├── lnd.conf         # LND Mainnet
-│   ├── .env.example     # 環境変数テンプレート
+│   ├── bitcoin.conf         # Bitcoin Core Mainnet
+│   ├── lnd.conf             # LND Mainnet
+│   ├── .env.example         # 環境変数テンプレート
 │   └── openclaw-config/
-│       └── agent.yaml   # OpenClaw エージェント設定
-└── scripts/             # セットアップスクリプト
-    ├── 00-deploy-infra.sh   # Step 1: AWS インフラ構築
-    ├── 01-setup-node.sh     # Step 2: Bitcoin Core + LND 起動
-    ├── 02-setup-openclaw.sh # Step 3: OpenClaw 接続
-    └── 03-verify-stack.sh   # ヘルスチェック
+│       ├── agent.yaml           # LN チャネル管理エージェント
+│       └── agent-purchasing.yaml # 購入エージェント設定
+└── scripts/                 # セットアップスクリプト
+    ├── 00-deploy-infra.sh       # Step 1: AWS インフラ構築
+    ├── 01-setup-node.sh         # Step 2: Bitcoin Core + LND 起動
+    ├── 02-setup-openclaw.sh     # Step 3: OpenClaw 接続
+    └── 03-verify-stack.sh       # ヘルスチェック
 ```
+
+## Phase 1: AI 購入エージェント
+
+BTC で実商品を購入する一気通貫フロー: **Ark Wallet → Lightning → V-Preca → Amazon**
+
+### セットアップ
+
+```bash
+cd purchasing-agent
+pnpm install
+cp .env.example .env
+# .env にクレデンシャルを記入
+
+# 開発
+pnpm dev
+
+# ビルド
+pnpm build && pnpm start
+```
+
+### MCP ツール一覧
+
+| ツール | 説明 |
+|---|---|
+| `ark_get_balance` | Ark ウォレット残高取得 |
+| `ark_get_address` | 入金用アドレス取得 |
+| `ark_pay_invoice` | Lightning invoice 支払い |
+| `usebitcoin_buy_vpreca` | V-Preca 購入 (JPY 指定) |
+| `amazon_login` | Amazon.co.jp ログイン |
+| `amazon_charge_vpreca` | V-Preca を支払い方法に追加 |
+| `amazon_purchase` | 商品購入 (URL 指定) |
+
+### 前提条件 (手動セットアップ)
+
+1. clw.cash アカウント作成 → `CLW_SESSION_TOKEN` 等を `.env` に設定
+2. Ark ウォレットに BTC を入金 (`ark_get_address` で取得したアドレスへ送金)
+3. Amazon テスト用アカウント作成 (2FA なし) → `.env` に設定
+4. `tiero/claw-cash` を `cachet-jp` org に fork → git submodule として追加
+
+---
 
 ## デプロイ手順
 
