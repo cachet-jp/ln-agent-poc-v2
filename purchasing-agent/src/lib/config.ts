@@ -1,5 +1,11 @@
 import { z } from "zod";
-import "dotenv/config";
+import { config as dotenvConfig } from "dotenv";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+// Load .env from the purchasing-agent package root (not CWD)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenvConfig({ path: resolve(__dirname, "../../.env") });
 
 const configSchema = z.object({
   // Amazon
