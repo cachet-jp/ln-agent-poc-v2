@@ -78,6 +78,7 @@ export async function getLightningSkill() {
     _lightningSkill = await createClwLightningSkill({
       ...getClwConfig(),
       network: "bitcoin", // mainnet
+      enableSwapManager: true,
     });
   }
   return _lightningSkill;
