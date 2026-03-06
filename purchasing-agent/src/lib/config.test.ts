@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+// Mock dotenv so .env file doesn't interfere with test env stubs
+vi.mock("dotenv", () => ({ config: () => {} }));
+
 describe("config", () => {
   beforeEach(() => {
     vi.resetModules();
-    // Clear cached config
   });
 
   it("parses default values correctly", async () => {
@@ -11,7 +13,6 @@ describe("config", () => {
     vi.stubEnv("HEADLESS", "false");
     vi.stubEnv("CLW_API_BASE_URL", "https://api.clw.cash");
 
-    // Dynamic import to get fresh module
     const { getConfig } = await import("./config.js");
     const config = getConfig();
 
@@ -24,7 +25,6 @@ describe("config", () => {
 
   it("defaults MAX_SPEND_JPY to 5000", async () => {
     vi.stubEnv("HEADLESS", "true");
-    // Don't set MAX_SPEND_JPY
 
     const { getConfig } = await import("./config.js");
     const config = getConfig();

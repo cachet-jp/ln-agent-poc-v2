@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getBalance, getReceiveAddresses, payLightningInvoice } from "../lib/clw-client.js";
+import { getBalance, getReceiveAddresses, createLightningInvoice, payLightningInvoice } from "../lib/clw-client.js";
 
 export function registerArkTools(server: McpServer): void {
   // ---- ark_get_balance ----
@@ -73,6 +73,44 @@ export function registerArkTools(server: McpServer): void {
       } catch (err) {
         return {
           content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---- ark_create_invoice ----
+  server.tool(
+    "ark_create_invoice",
+    "Create a Lightning invoice for receiving BTC into the Ark wallet (via Boltz reverse swap). Returns a BOLT11 invoice to pay.",
+    {
+      amount: z.number().positive().describe("Amount in satoshis to receive"),
+      description: z.string().optional().describe("Optional invoice description"),
+    },
+    async ({ amount, description }) => {
+      try {
+        const invoice = await createLightningInvoice(amount, description);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  bolt11: invoice.bolt11,
+                  paymentHash: invoice.paymentHash,
+                  amount: `${invoice.amount.toLocaleString()} sats`,
+                  description: invoice.description ?? null,
+                  expirySeconds: invoice.expirySeconds,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Error creating invoice: ${(err as Error).message}` }],
           isError: true,
         };
       }
