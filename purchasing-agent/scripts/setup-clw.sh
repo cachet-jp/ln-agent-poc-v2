@@ -100,7 +100,7 @@ if [ "$IDENTITY_COUNT" -gt "0" ]; then
   curl -sf -X POST "$API_BASE/v1/identities/$IDENTITY_ID/restore" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"public_key\": \"$PUBLIC_KEY\"}" > /dev/null
+    -d "{\"public_key\": \"$PUBLIC_KEY\"}" > /dev/null || echo "(restore call returned non-zero, continuing...)"
 else
   echo "Creating new identity..."
   IDENTITY_RESPONSE=$(curl -sf -X POST "$API_BASE/v1/identities" \
