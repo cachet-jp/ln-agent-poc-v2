@@ -1,6 +1,6 @@
-# /auto-purchase - BTC で商品を自動購入
+# /auto-purchase - BTC で V-Preca を購入
 
-Ark ウォレットの BTC を使って、Lightning → V-Preca → Amazon の一気通貫フローで商品を購入します。
+Ark ウォレットの BTC を使って、Lightning 支払いで V-Preca ギフトカードを購入します。
 
 ## Instructions
 
@@ -12,18 +12,17 @@ Ark ウォレットの BTC を使って、Lightning → V-Preca → Amazon の�
 
 ---
 
-**BTC 自動購入フロー**
+**BTC → V-Preca 購入フロー**
 
 以下のステップを自動で実行します:
 
 1. Ark ウォレット残高確認
-2. UseBitcoin.jp で V-Preca ギフトカード購入 (Lightning 支払い)
-3. Amazon.co.jp にログイン
-4. V-Preca を支払い方法に登録
-5. 指定商品を購入
+2. V-Preca 金額を選択
+3. UseBitcoin.jp で Lightning 支払い
+4. V-Preca コード取得
 
 **必要なもの:**
-- `.env` に clw.cash / Amazon の認証情報が設定済みであること
+- `.env` に clw.cash の認証情報が設定済みであること
 - Ark ウォレットに十分な BTC 残高があること
 
 **現在の安全制限:**
@@ -62,21 +61,7 @@ V-Preca 購入中...
   金額: ¥X,XXX
   Lightning invoice 生成中...
   支払い中...
-  完了！カード番号を取得しました。
-```
-
-#### 2c. Amazon ログイン + チャージ + 購入
-
-1. `amazon_login` でログイン
-2. `amazon_charge_vpreca` で V-Preca を登録
-3. ユーザーに購入する商品の Amazon URL を確認
-4. `amazon_purchase` で商品を購入
-
-```
-Amazon 購入完了！
-  注文番号: XXX-XXXXXXX-XXXXXXX
-  商品名: XXXXXX
-  合計金額: ¥X,XXX
+  完了！V-Preca コードを取得しました。
 ```
 
 ### Step 3: 結果サマリー
@@ -84,13 +69,14 @@ Amazon 購入完了！
 全フロー完了後、まとめを表示:
 
 ```
-=== 購入完了サマリー ===
+=== V-Preca 購入完了 ===
   BTC 支払額: XX,XXX sats
   V-Preca 金額: ¥X,XXX
-  Amazon 注文番号: XXX-XXXXXXX-XXXXXXX
-  商品: XXXXXX
   Ark 残高 (購入後): XX,XXX sats
 ```
+
+※ V-Preca のカード番号・セキュリティコードはセキュリティのためチャットに表示しません。
+  購入完了後、UseBitcoin.jp のマイページから確認してください。
 
 ## Error Handling
 
@@ -104,11 +90,12 @@ purchasing-agent MCP サーバーが接続済みであること。未接続の�
 
 ```bash
 cd purchasing-agent
-pnpm install && pnpm build
+pnpm install
 
 # Claude Desktop の MCP 設定に追加:
 # "purchasing-agent": {
-#   "command": "node",
-#   "args": ["<path>/purchasing-agent/dist/server.js"]
+#   "command": "npx",
+#   "args": ["tsx", "src/server.ts"],
+#   "cwd": "<path>/purchasing-agent"
 # }
 ```
