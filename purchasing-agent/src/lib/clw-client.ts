@@ -97,6 +97,24 @@ export async function getReceiveAddresses(): Promise<BitcoinAddress[]> {
   return skill.getReceiveAddresses();
 }
 
+export interface LightningInvoice {
+  bolt11: string;
+  paymentHash: string;
+  amount: number;
+  description?: string;
+  expirySeconds: number;
+  createdAt: Date;
+  preimage?: string;
+}
+
+export async function createLightningInvoice(
+  amount: number,
+  description?: string,
+): Promise<LightningInvoice> {
+  const skill = await getLightningSkill();
+  return skill.createInvoice({ amount, description });
+}
+
 export async function payLightningInvoice(bolt11: string): Promise<PaymentResult> {
   const skill = await getLightningSkill();
   return skill.payInvoice({ bolt11 });
