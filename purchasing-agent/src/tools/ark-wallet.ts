@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getBalance, getReceiveAddresses, createLightningInvoice, payLightningInvoice } from "../lib/clw-client.js";
+import { getBalance, getReceiveAddresses, createLightningInvoice, payLightningInvoice, onboardBoardingUtxos } from "../lib/clw-client.js";
 
 export function registerArkTools(server: McpServer): void {
   // ---- ark_get_balance ----
@@ -111,6 +111,40 @@ export function registerArkTools(server: McpServer): void {
       } catch (err) {
         return {
           content: [{ type: "text" as const, text: `Error creating invoice: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---- ark_onboard ----
+  server.tool(
+    "ark_onboard",
+    "Onboard confirmed boarding UTXOs into Ark offchain vTXOs. Call this after sending BTC to the boarding address and waiting for confirmation. Converts onchain balance to spendable offchain balance.",
+    {},
+    async () => {
+      try {
+        const result = await onboardBoardingUtxos();
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  commitmentTxid: result.commitmentTxid,
+                  amount: `${result.amount.toLocaleString()} sats`,
+                  message: "Boarding UTXOs onboarded to Ark offchain. Balance should now show as offchain available.",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Onboard failed: ${(err as Error).message}` }],
           isError: true,
         };
       }

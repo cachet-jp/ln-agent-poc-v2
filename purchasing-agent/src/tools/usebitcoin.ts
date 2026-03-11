@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { newPage, humanDelay, closeBrowser } from "../lib/browser.js";
+import { newPage, humanDelay } from "../lib/browser.js";
 import { payLightningInvoice } from "../lib/clw-client.js";
 import { getConfig } from "../lib/config.js";
 import type { VPrecaCode } from "../types.js";
@@ -51,84 +51,58 @@ export function registerUseBitcoinTools(server: McpServer): void {
         // 1. Navigate directly to the V-Preca product page for the chosen amount
         //    URL: /ja/products/vpricagift/vpreca-{amount}
         const productUrl = `${USEBITCOIN_BASE}/ja/products/vpricagift/vpreca-${amount}`;
-        await page.goto(productUrl, { waitUntil: "networkidle" });
+        await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
         await humanDelay();
 
         // 2. Select quantity = 1 (default), accept terms, and proceed
         //    UseBitcoin uses React Aria components (role-based selectors)
 
-        // Accept terms checkbox (React Aria checkbox with role="checkbox")
-        const termsCheckbox = page.getByRole("checkbox").first();
-        if (await termsCheckbox.isVisible({ timeout: 5000 }).catch(() => false)) {
-          const isChecked = await termsCheckbox.isChecked().catch(() => false);
-          if (!isChecked) {
-            await termsCheckbox.click();
+        // Accept terms checkbox — uses custom React Aria styling
+        const termsLabel = page.getByText("利用規約に同意します");
+        if (await termsLabel.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await termsLabel.click();
+          await humanDelay(300, 600);
+        } else {
+          const termsCheckbox = page.getByRole("checkbox").first();
+          if (await termsCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await termsCheckbox.click({ force: true });
             await humanDelay(300, 600);
           }
         }
 
-        // 3. Set up request interception to capture the POST /invoices response
-        //    This returns the bolt11 Lightning invoice and order ID
-        const invoiceResponsePromise = page.waitForResponse(
-          (resp) =>
-            resp.url().includes("/invoices") &&
-            resp.request().method() === "POST" &&
-            resp.status() === 200,
-          { timeout: 30000 },
-        );
-
-        // Click "購入へ進む" (proceed to purchase) button
+        // 3. Click "購入へ進む" (proceed to purchase) button
+        //    This navigates to the payment page showing QR code + Lightning invoice
         const proceedButton = page
           .getByRole("button", { name: /購入へ進む|購入|proceed/i })
           .first();
         await proceedButton.waitFor({ timeout: 10000 });
         await proceedButton.click();
-        await humanDelay(1000, 2000);
 
-        // 4. Extract bolt11 invoice from the /invoices API response
-        const invoiceResponse = await invoiceResponsePromise;
-        const invoiceData = (await invoiceResponse.json()) as {
-          bolt11?: string;
-          invoice?: string;
-          order_id?: string;
-          id?: string;
-        };
+        // 4. Wait for payment page to load (shows invoice + QR code)
+        await page.waitForSelector('text=/インボイスをコピー|sats/i', {
+          timeout: 30000,
+        });
+        await humanDelay(2000, 3000);
 
-        const bolt11 =
-          invoiceData.bolt11 ??
-          invoiceData.invoice ??
-          null;
-        const orderId =
-          invoiceData.order_id ??
-          invoiceData.id ??
-          null;
-
-        if (!bolt11 || !bolt11.startsWith("lnbc")) {
-          // Fallback: try extracting from page text
-          const fallbackBolt11 = await extractLightningInvoiceFromPage(page);
-          if (!fallbackBolt11) {
-            throw new Error(
-              "Could not obtain Lightning invoice from /invoices API or page content.",
-            );
-          }
-          // Use fallback
-          await payAndExtract(page, fallbackBolt11, amount);
+        // 5. Extract bolt11 invoice from payment page DOM
+        const bolt11 = await extractLightningInvoiceFromPage(page);
+        if (!bolt11) {
+          throw new Error(
+            "Could not extract Lightning invoice from payment page.",
+          );
         }
 
-        // 5. Pay the Lightning invoice via Ark wallet
-        const payResult = await payLightningInvoice(bolt11!);
+        // 6. Pay the Lightning invoice via Ark wallet
+        const payResult = await payLightningInvoice(bolt11);
         if (!payResult.preimage) {
           throw new Error("Lightning payment failed — no preimage received");
         }
 
-        // 6. Wait for payment confirmation
-        //    UseBitcoin uses SSE at /api/orders/{id}/stream for status updates.
+        // 7. Wait for payment confirmation
+        //    UseBitcoin uses SSE for status updates.
         //    On success, the page redirects to /orders/{orderId} or shows fulfillment.
-        //    We wait for the URL to change to the order result page.
         await Promise.race([
-          // Wait for redirect to order page
           page.waitForURL(/\/orders\//, { timeout: 120000 }),
-          // Or wait for fulfillment text on current page
           page
             .waitForSelector('text=/完了|fulfilled|success|paid/i', {
               timeout: 120000,
@@ -137,8 +111,12 @@ export function registerUseBitcoinTools(server: McpServer): void {
         ]);
         await humanDelay(2000, 4000);
 
-        // 7. Extract the V-Preca code from the order result page
+        // 8. Extract the V-Preca code from the order result page
         const vprecaCode = await extractVPrecaCode(page, amount);
+
+        // Extract order ID from URL if possible
+        const orderMatch = page.url().match(/\/orders\/([^/?]+)/);
+        const orderId = orderMatch?.[1] ?? "unknown";
 
         await page.context().close();
 
@@ -149,12 +127,15 @@ export function registerUseBitcoinTools(server: McpServer): void {
               text: JSON.stringify(
                 {
                   success: true,
-                  cardNumber: vprecaCode.cardNumber,
-                  securityCode: vprecaCode.securityCode,
+                  voucherCode: vprecaCode.voucherCode,
+                  cardLast4: vprecaCode.cardLast4,
                   amount: vprecaCode.amount,
                   expiryDate: vprecaCode.expiryDate ?? "not provided",
-                  orderId: orderId ?? "unknown",
+                  orderId,
                   paymentPreimage: payResult.preimage,
+                  // deprecated fields for backward compat
+                  cardNumber: vprecaCode.cardNumber,
+                  securityCode: vprecaCode.securityCode,
                 },
                 null,
                 2,
@@ -189,73 +170,57 @@ export function registerUseBitcoinTools(server: McpServer): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Pay a Lightning invoice and extract V-Preca code (used by fallback path).
- */
-async function payAndExtract(
-  page: import("playwright").Page,
-  bolt11: string,
-  amount: number,
-): Promise<never> {
-  const payResult = await payLightningInvoice(bolt11);
-  if (!payResult.preimage) {
-    throw new Error("Lightning payment failed — no preimage received");
-  }
-
-  await Promise.race([
-    page.waitForURL(/\/orders\//, { timeout: 120000 }),
-    page
-      .waitForSelector('text=/完了|fulfilled|success|paid/i', {
-        timeout: 120000,
-      })
-      .catch(() => null),
-  ]);
-  await humanDelay(2000, 4000);
-
-  const vprecaCode = await extractVPrecaCode(page, amount);
-  await page.context().close();
-
-  // This is a fallback path — throw with the result so the caller's catch can handle it
-  // In practice we'd restructure, but for now we use a special error
-  const err = new Error("__VPRECA_SUCCESS__");
-  (err as any).result = {
-    success: true,
-    ...vprecaCode,
-    paymentPreimage: payResult.preimage,
-  };
-  throw err;
-}
-
-/**
- * Fallback: extract bolt11 invoice from page text content.
+ * Extract bolt11 Lightning invoice from the payment page DOM.
+ * Uses multiple strategies to find the invoice string.
  */
 async function extractLightningInvoiceFromPage(
   page: import("playwright").Page,
 ): Promise<string | null> {
-  // Strategy 1: Find text starting with lnbc (BOLT11 mainnet invoice)
-  const allText = await page.textContent("body");
-  if (allText) {
-    const match = allText.match(/\b(lnbc[a-z0-9]+)\b/i);
-    if (match) return match[1];
-  }
-
-  // Strategy 2: Check for a copy button with invoice data
+  // Strategy 1: Check for a copy button with invoice data attribute
   const copyBtn = page
-    .getByRole("button", { name: /コピー|copy/i })
+    .getByRole("button", { name: /インボイスをコピー|コピー|copy/i })
     .first();
   if (await copyBtn.isVisible().catch(() => false)) {
     const dataInvoice = await copyBtn.getAttribute("data-clipboard-text");
     if (dataInvoice && dataInvoice.startsWith("lnbc")) return dataInvoice;
   }
 
+  // Strategy 2: Find text starting with lnbc in page body text
+  const allText = await page.textContent("body");
+  if (allText) {
+    const match = allText.match(/\b(lnbc[a-z0-9]+)\b/i);
+    if (match) return match[1];
+  }
+
+  // Strategy 3: Search DOM innerHTML for hidden invoice data
+  const invoice = await page.evaluate(() => {
+    // Check data attributes
+    const els = document.querySelectorAll("[data-invoice], [data-bolt11], [data-value]");
+    for (const el of els) {
+      for (const attr of ["data-invoice", "data-bolt11", "data-value"]) {
+        const val = el.getAttribute(attr);
+        if (val && val.startsWith("lnbc")) return val;
+      }
+    }
+    // Search full innerHTML for lnbc pattern
+    const all = document.body.innerHTML;
+    const match = all.match(/(lnbc[a-z0-9]{50,})/i);
+    return match ? match[1] : null;
+  });
+  if (invoice) return invoice;
+
   return null;
 }
 
 /**
- * Extract V-Preca card number and security code from the order result page.
+ * Extract V-Preca voucher code and card last-4 from the order result page.
  *
- * UseBitcoin's order fulfillment page shows the gift code details.
- * We try multiple strategies to find the card number (16 digits) and
- * security code (3 digits).
+ * UseBitcoin order page shows:
+ *   コード 1/1
+ *   [voucher code]  (alphanumeric, ~15 chars)
+ *   [card last 4]   (4 digits)
+ *
+ * The two values appear as separate input/text fields after "コード".
  */
 async function extractVPrecaCode(
   page: import("playwright").Page,
@@ -264,56 +229,49 @@ async function extractVPrecaCode(
   // Wait for code content to render
   await humanDelay(1000, 2000);
 
+  // Strategy 1: Find input fields (UseBitcoin renders codes in readonly inputs)
+  const inputs = await page.locator("input[readonly], input[disabled]").all();
+  if (inputs.length >= 2) {
+    const voucherCode = await inputs[0].inputValue().catch(() => "");
+    const cardLast4 = await inputs[1].inputValue().catch(() => "");
+    if (voucherCode && cardLast4) {
+      return {
+        voucherCode,
+        cardLast4,
+        cardNumber: voucherCode,
+        securityCode: cardLast4,
+        amount: expectedAmount,
+      };
+    }
+  }
+
+  // Strategy 2: Parse from body text — "コード 1/1{code}{4digits}"
   const bodyText = (await page.textContent("body")) ?? "";
-
-  // Card number: 16 digits, possibly with spaces/dashes
-  const cardMatch = bodyText.match(
-    /\b(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4})\b/,
-  );
-
-  // Security code: 3 digits after a label
-  const secMatch = bodyText.match(
-    /(?:セキュリティコード|CVV|CVC|security\s*code|認証コード)[:\s]*(\d{3})/i,
-  );
-
-  if (cardMatch) {
+  const codeMatch = bodyText.match(/コード\s*\d+\/\d+\s*([A-Za-z0-9]{10,20})\s*(\d{4})/);
+  if (codeMatch) {
     return {
-      cardNumber: cardMatch[1].replace(/[\s-]/g, ""),
-      securityCode: secMatch?.[1] ?? "",
+      voucherCode: codeMatch[1],
+      cardLast4: codeMatch[2],
+      cardNumber: codeMatch[1],
+      securityCode: codeMatch[2],
       amount: expectedAmount,
     };
   }
 
-  // Fallback: look for labelled elements on the page
-  // Try common CSS patterns for code display
-  for (const selector of [
-    "[data-testid*='card']",
-    "[class*='card-number']",
-    "[class*='code']",
-    "code",
-    "pre",
-    ".result",
-    ".gift-code",
-  ]) {
-    const el = page.locator(selector).first();
-    const text = await el.textContent().catch(() => null);
-    if (text) {
-      const innerCardMatch = text.match(
-        /(\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4})/,
-      );
-      if (innerCardMatch) {
-        const innerSecMatch = text.match(/(\d{3})\s*$/);
-        return {
-          cardNumber: innerCardMatch[1].replace(/[\s-]/g, ""),
-          securityCode: innerSecMatch?.[1] ?? secMatch?.[1] ?? "",
-          amount: expectedAmount,
-        };
-      }
-    }
+  // Strategy 3: Look for any alphanumeric code + 4-digit pattern
+  const fallbackMatch = bodyText.match(/([A-Za-z][A-Za-z0-9]{9,19})\s*(\d{4})/);
+  if (fallbackMatch) {
+    return {
+      voucherCode: fallbackMatch[1],
+      cardLast4: fallbackMatch[2],
+      cardNumber: fallbackMatch[1],
+      securityCode: fallbackMatch[2],
+      amount: expectedAmount,
+    };
   }
 
   throw new Error(
-    "Could not extract V-Preca card number from the order page. " +
+    "Could not extract V-Preca voucher code from the order page. " +
       "The page structure may have changed.",
   );
 }

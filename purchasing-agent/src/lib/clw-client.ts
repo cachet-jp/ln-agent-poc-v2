@@ -12,6 +12,7 @@ import {
   type ClwSkillConfig,
 } from "@clw-cash/skills";
 import type { ArkadeBitcoinSkill } from "@clw-cash/skills";
+import { RemoteSignerIdentity } from "@clw-cash/sdk";
 
 // Re-export types for consumers
 export type { ClwSkillConfig };
@@ -119,4 +120,35 @@ export async function createLightningInvoice(
 export async function payLightningInvoice(bolt11: string): Promise<PaymentResult> {
   const skill = await getLightningSkill();
   return skill.payInvoice({ bolt11 });
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding: convert boarding UTXOs to offchain vTXOs
+// ---------------------------------------------------------------------------
+
+export interface OnboardResult {
+  commitmentTxid: string;
+  amount: number;
+}
+
+/**
+ * Onboard boarding UTXOs into Ark offchain vTXOs.
+ * Fetches current fee info from the Ark server and settles all boarding UTXOs.
+ */
+export async function onboardBoardingUtxos(): Promise<OnboardResult> {
+  // Ensure TreeSignerSession is loaded (required for settle/onboard)
+  await RemoteSignerIdentity.init();
+
+  const skill = await getBitcoinSkill();
+  const wallet = skill.getWallet();
+
+  // Get current fee info from the Ark server
+  const info = await wallet.arkProvider.getInfo();
+  const feeInfo = info.fees;
+
+  const result = await skill.onboard({ feeInfo });
+  return {
+    commitmentTxid: result.commitmentTxid,
+    amount: Number(result.amount),
+  };
 }
