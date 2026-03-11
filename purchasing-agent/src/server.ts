@@ -1,4 +1,13 @@
 #!/usr/bin/env node
+
+// Polyfill EventSource for Node.js (Ark SDK uses SSE for Ark round events)
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+const { EventSource: _EventSource } = _require("eventsource");
+if (!("EventSource" in globalThis)) {
+  (globalThis as any).EventSource = _EventSource;
+}
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerArkTools } from "./tools/ark-wallet.js";

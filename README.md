@@ -50,7 +50,29 @@ ln-agent-poc/
 
 ## Phase 1: AI 購入エージェント
 
-BTC で実商品を購入する一気通貫フロー: **Ark Wallet → Lightning → V-Preca → Amazon**
+BTC で V-Preca ギフトカードを自動購入する AI エージェント。
+**Ark Protocol (Bitcoin L2) → Lightning Network → UseBitcoin.jp → V-Preca** の E2E フローを実現。
+
+### E2E 購入フロー（実証済み）
+
+```
+BTC (onchain)
+  │  boarding address に送金
+  ▼
+Ark Protocol (offchain vTXO)
+  │  Wallet.settle() で onboard
+  ▼
+Ark Wallet (offchain balance)
+  │  payLightningInvoice() → Boltz reverse swap
+  ▼
+Lightning Network
+  │  BOLT11 invoice 支払い
+  ▼
+UseBitcoin.jp
+  │  V-Preca ギフトカード発行
+  ▼
+V-Preca (バウチャーコード + カード下4桁)
+```
 
 ### セットアップ
 
@@ -69,21 +91,35 @@ pnpm build && pnpm start
 
 ### MCP ツール一覧
 
-| ツール | 説明 |
-|---|---|
-| `ark_get_balance` | Ark ウォレット残高取得 |
-| `ark_get_address` | 入金用アドレス取得 |
-| `ark_pay_invoice` | Lightning invoice 支払い |
-| `usebitcoin_buy_vpreca` | V-Preca 購入 (JPY 指定) |
-| `amazon_login` | Amazon.co.jp ログイン |
-| `amazon_charge_vpreca` | V-Preca を支払い方法に追加 |
-| `amazon_purchase` | 商品購入 (URL 指定) |
+| ツール | 説明 | 状態 |
+|---|---|---|
+| `ark_get_balance` | Ark ウォレット残高取得 (offchain + onchain) | ✅ |
+| `ark_get_address` | 入金用アドレス取得 (arkAddress / boardingAddress) | ✅ |
+| `ark_create_invoice` | Lightning invoice 作成 (Boltz reverse swap) | ✅ |
+| `ark_pay_invoice` | Lightning invoice 支払い (Boltz submarine swap) | ✅ |
+| `usebitcoin_buy_vpreca` | V-Preca 購入 (Lightning 支払い、500〜100,000 JPY) | ✅ |
+
+### テストスクリプト
+
+```bash
+# 残高確認
+npx tsx scripts/check-new-identity.ts
+
+# オンチェーン → offchain vTXO 変換
+npx tsx scripts/test-onboard.ts
+
+# V-Preca 購入テスト (500 JPY)
+npx tsx scripts/test-buy-vpreca.ts
+
+# Boltz API 診断
+npx tsx scripts/diagnose-boltz.ts
+```
 
 ### 前提条件 (手動セットアップ)
 
 1. clw.cash アカウント作成 → `CLW_SESSION_TOKEN` 等を `.env` に設定
-2. Ark ウォレットに BTC を入金 (`ark_get_address` で取得したアドレスへ送金)
-3. Amazon テスト用アカウント作成 (2FA なし) → `.env` に設定
+2. Ark ウォレットに BTC を入金 (`ark_get_address` で取得した boarding address へ送金)
+3. onboard 実行で boarding UTXO を offchain vTXO に変換
 4. `tiero/claw-cash` を `cachet-jp` org に fork → git submodule として追加
 
 ---
