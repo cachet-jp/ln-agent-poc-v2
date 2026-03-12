@@ -8,6 +8,7 @@
     "purchasing-agent": "dist/server.js"
   },
   "scripts": {
+    "postinstall": "cd ../claw-cash && pnpm install --frozen-lockfile || pnpm install",
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "start": "tsx src/server.ts",
@@ -16,6 +17,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@arkade-os/boltz-swap": "^0.2.18",
+    "@arkade-os/sdk": "^0.3.12",
     "@clw-cash/skills": "link:../claw-cash/skills",
     "@clw-cash/sdk": "link:../claw-cash/remote-signer-identity",
     "@modelcontextprotocol/sdk": "^1.12.1",
