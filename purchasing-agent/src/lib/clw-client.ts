@@ -6,16 +6,24 @@
  */
 
 import { getConfig } from "./config.js";
+// Import directly from sub-modules to avoid pulling in @lendasat/lendaswap-sdk-pure
+// (which has broken ESM exports) via the @clw-cash/skills barrel index.
+// Uses relative paths because the link package's exports field only exposes ".".
+import { Wallet } from "@arkade-os/sdk";
+import { ArkadeBitcoinSkill } from "../../claw-cash/skills/src/skills/arkadeBitcoin.js";
 import {
-  createClwBitcoinSkill,
-  createClwLightningSkill,
-  type ClwSkillConfig,
-} from "@clw-cash/skills";
-import type { ArkadeBitcoinSkill } from "@clw-cash/skills";
+  ArkadeLightningSkill,
+  type ArkadeLightningSkillConfig,
+} from "../../claw-cash/skills/src/skills/lightning.js";
 import { RemoteSignerIdentity } from "@clw-cash/sdk";
 
-// Re-export types for consumers
-export type { ClwSkillConfig };
+export interface ClwSkillConfig {
+  apiBaseUrl: string;
+  sessionToken: string;
+  identityId: string;
+  publicKey: string;
+  arkServerUrl: string;
+}
 
 export interface BalanceInfo {
   total: number;
@@ -48,8 +56,8 @@ export interface PaymentResult {
 // Lazy singleton — initialized on first use
 // ---------------------------------------------------------------------------
 
-let _bitcoinSkill: Awaited<ReturnType<typeof createClwBitcoinSkill>> | null = null;
-let _lightningSkill: Awaited<ReturnType<typeof createClwLightningSkill>> | null = null;
+let _bitcoinSkill: ArkadeBitcoinSkill | null = null;
+let _lightningSkill: ArkadeLightningSkill | null = null;
 
 function getClwConfig(): ClwSkillConfig {
   const cfg = getConfig();
@@ -67,17 +75,30 @@ function getClwConfig(): ClwSkillConfig {
   };
 }
 
+async function createWallet(config: ClwSkillConfig): Promise<Wallet> {
+  const identity = new RemoteSignerIdentity({
+    apiBaseUrl: config.apiBaseUrl,
+    identityId: config.identityId,
+    sessionToken: config.sessionToken,
+    compressedPublicKey: config.publicKey,
+  });
+  return Wallet.create({ identity, arkServerUrl: config.arkServerUrl });
+}
+
 export async function getBitcoinSkill() {
   if (!_bitcoinSkill) {
-    _bitcoinSkill = await createClwBitcoinSkill(getClwConfig());
+    const wallet = await createWallet(getClwConfig());
+    _bitcoinSkill = new ArkadeBitcoinSkill(wallet);
   }
   return _bitcoinSkill;
 }
 
 export async function getLightningSkill() {
   if (!_lightningSkill) {
-    _lightningSkill = await createClwLightningSkill({
-      ...getClwConfig(),
+    const config = getClwConfig();
+    const wallet = await createWallet(config);
+    _lightningSkill = new ArkadeLightningSkill({
+      wallet,
       network: "bitcoin", // mainnet
       enableSwapManager: true,
     });
