@@ -7,7 +7,14 @@ let _browser: Browser | null = null;
 export async function getBrowser(): Promise<Browser> {
   if (!_browser || !_browser.isConnected()) {
     const { HEADLESS } = getConfig();
-    _browser = await chromium.launch({ headless: HEADLESS });
+    _browser = await chromium.launch({
+      headless: HEADLESS,
+      args: [
+        "--disable-blink-features=AutomationControlled",
+        "--no-first-run",
+        "--no-default-browser-check",
+      ],
+    });
   }
   return _browser;
 }
@@ -44,4 +51,20 @@ export async function humanDelay(
 ): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs) + minMs);
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Type text into a field with human-like timing.
+ * Clicks the element first, waits briefly, then types char-by-char
+ * with a randomized per-keystroke delay (50-150ms).
+ */
+export async function humanType(
+  page: Page,
+  selector: string,
+  text: string,
+): Promise<void> {
+  const el = page.locator(selector).first();
+  await el.click();
+  await humanDelay(200, 500);
+  await el.pressSequentially(text, { delay: 50 + Math.random() * 100 });
 }

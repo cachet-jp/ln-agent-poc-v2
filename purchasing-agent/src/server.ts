@@ -12,7 +12,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerArkTools } from "./tools/ark-wallet.js";
 import { registerUseBitcoinTools } from "./tools/usebitcoin.js";
-import { getConfig } from "./lib/config.js";
 
 const server = new McpServer({
   name: "purchasing-agent",
@@ -23,14 +22,15 @@ const server = new McpServer({
 registerArkTools(server);
 registerUseBitcoinTools(server);
 
-// Amazon tools — only registered when credentials are configured (Phase 1+)
-const config = getConfig();
-if (config.AMAZON_EMAIL && config.AMAZON_PASSWORD) {
-  const { registerAmazonTools } = await import("./tools/amazon.js");
-  const { registerAmazonSetupTools } = await import("./tools/amazon-setup.js");
-  registerAmazonTools(server);
-  registerAmazonSetupTools(server);
-}
+// Amazon setup tools — always available (account creation, session save, etc.)
+const { registerAmazonSetupTools } = await import("./tools/amazon-setup.js");
+registerAmazonSetupTools(server);
+
+// Amazon operational tools — always available
+// Each tool checks internally for saved session cookies (storage-state/amazon.json).
+// amazon_login can work with credentials from .env OR with saved session cookies.
+const { registerAmazonTools } = await import("./tools/amazon.js");
+registerAmazonTools(server);
 
 // Start server with stdio transport
 const transport = new StdioServerTransport();

@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 
 // Load .env from the purchasing-agent package root (not CWD)
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenvConfig({ path: resolve(__dirname, "../../.env"), override: true });
+dotenvConfig({ path: resolve(__dirname, "../../.env") });
 
 // Treat empty strings as undefined (Claude Desktop passes "" for unset env vars)
 const optStr = z.preprocess(

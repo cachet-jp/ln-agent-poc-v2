@@ -42,3 +42,21 @@ export interface AmazonPurchaseResult {
   itemName: string;
   totalAmount: string;
 }
+
+/** Amazon account creation page states */
+export type AmazonPageState =
+  | "registration_form"
+  | "captcha"
+  | "puzzle"
+  | "email_otp"
+  | "sms_otp"
+  | "success"
+  | "error"
+  | "unknown";
+
+/** Result returned by Amazon account creation flow tools */
+export interface AmazonAccountFlowResult {
+  step: AmazonPageState;
+  message: string;
+  credentials?: { email: string; password: string };
+}

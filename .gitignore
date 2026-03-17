@@ -26,3 +26,6 @@ purchasing-agent/node_modules/
 purchasing-agent/dist/
 purchasing-agent/.env
 purchasing-agent/storage-state/
+purchasing-agent/screenshots/
+purchasing-agent/.venv-scrapling/
+purchasing-agent/test-*.py
