@@ -7,30 +7,122 @@ AWS 上に LND + Bitcoin Core + OpenClaw を構築し、AI エージェント経
 
 ```
 ln-agent-poc/
-├── terraform/           # AWS インフラ (IaC)
-│   ├── main.tf          # Provider / backend
-│   ├── variables.tf     # 変数定義
-│   ├── vpc.tf           # VPC / Subnet
-│   ├── security.tf      # SG / IAM
-│   ├── compute.tf       # EC2 / EIP
-│   ├── storage.tf       # S3 / Secrets Manager
-│   ├── monitoring.tf    # CloudWatch / SNS
-│   ├── outputs.tf       # 出力値
-│   ├── userdata.sh      # EC2 bootstrap
+├── terraform/               # AWS インフラ (IaC)
+│   ├── main.tf              # Provider / backend
+│   ├── variables.tf         # 変数定義
+│   ├── vpc.tf               # VPC / Subnet
+│   ├── security.tf          # SG / IAM
+│   ├── compute.tf           # EC2 / EIP
+│   ├── storage.tf           # S3 / Secrets Manager
+│   ├── monitoring.tf        # CloudWatch / SNS
+│   ├── outputs.tf           # 出力値
+│   ├── userdata.sh          # EC2 bootstrap
 │   └── terraform.tfvars.example
-├── docker/              # コンテナ設定
+├── purchasing-agent/        # Phase 1: AI 購入エージェント (MCP ツール)
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── .env.example
+│   └── src/
+│       ├── server.ts        # MCP サーバー (stdio transport)
+│       ├── types.ts         # 共通型定義
+│       ├── tools/
+│       │   ├── ark-wallet.ts    # Ark ウォレット操作
+│       │   ├── usebitcoin.ts    # V-Preca 購入 (Lightning 支払い)
+│       │   └── amazon.ts       # Amazon 購入
+│       └── lib/
+│           ├── clw-client.ts    # clw.cash SDK ラッパー
+│           ├── browser.ts       # Playwright ヘルパー
+│           └── config.ts        # 設定管理 (zod validation)
+├── docker/                  # コンテナ設定
 │   ├── docker-compose.yml
-│   ├── bitcoin.conf     # Bitcoin Core Mainnet
-│   ├── lnd.conf         # LND Mainnet
-│   ├── .env.example     # 環境変数テンプレート
+│   ├── bitcoin.conf         # Bitcoin Core Mainnet
+│   ├── lnd.conf             # LND Mainnet
+│   ├── .env.example         # 環境変数テンプレート
 │   └── openclaw-config/
-│       └── agent.yaml   # OpenClaw エージェント設定
-└── scripts/             # セットアップスクリプト
-    ├── 00-deploy-infra.sh   # Step 1: AWS インフラ構築
-    ├── 01-setup-node.sh     # Step 2: Bitcoin Core + LND 起動
-    ├── 02-setup-openclaw.sh # Step 3: OpenClaw 接続
-    └── 03-verify-stack.sh   # ヘルスチェック
+│       ├── agent.yaml           # LN チャネル管理エージェント
+│       └── agent-purchasing.yaml # 購入エージェント設定
+└── scripts/                 # セットアップスクリプト
+    ├── 00-deploy-infra.sh       # Step 1: AWS インフラ構築
+    ├── 01-setup-node.sh         # Step 2: Bitcoin Core + LND 起動
+    ├── 02-setup-openclaw.sh     # Step 3: OpenClaw 接続
+    └── 03-verify-stack.sh       # ヘルスチェック
 ```
+
+## Phase 1: AI 購入エージェント
+
+BTC で V-Preca ギフトカードを自動購入する AI エージェント。
+**Ark Protocol (Bitcoin L2) → Lightning Network → UseBitcoin.jp → V-Preca** の E2E フローを実現。
+
+### E2E 購入フロー（実証済み）
+
+```
+BTC (onchain)
+  │  boarding address に送金
+  ▼
+Ark Protocol (offchain vTXO)
+  │  Wallet.settle() で onboard
+  ▼
+Ark Wallet (offchain balance)
+  │  payLightningInvoice() → Boltz reverse swap
+  ▼
+Lightning Network
+  │  BOLT11 invoice 支払い
+  ▼
+UseBitcoin.jp
+  │  V-Preca ギフトカード発行
+  ▼
+V-Preca (バウチャーコード + カード下4桁)
+```
+
+### セットアップ
+
+```bash
+cd purchasing-agent
+pnpm install
+cp .env.example .env
+# .env にクレデンシャルを記入
+
+# 開発
+pnpm dev
+
+# ビルド
+pnpm build && pnpm start
+```
+
+### MCP ツール一覧
+
+| ツール | 説明 | 状態 |
+|---|---|---|
+| `ark_get_balance` | Ark ウォレット残高取得 (offchain + onchain) | ✅ |
+| `ark_get_address` | 入金用アドレス取得 (arkAddress / boardingAddress) | ✅ |
+| `ark_create_invoice` | Lightning invoice 作成 (Boltz reverse swap) | ✅ |
+| `ark_pay_invoice` | Lightning invoice 支払い (Boltz submarine swap) | ✅ |
+| `usebitcoin_buy_vpreca` | V-Preca 購入 (Lightning 支払い、500〜100,000 JPY) | ✅ |
+
+### テストスクリプト
+
+```bash
+# 残高確認
+npx tsx scripts/check-new-identity.ts
+
+# オンチェーン → offchain vTXO 変換
+npx tsx scripts/test-onboard.ts
+
+# V-Preca 購入テスト (500 JPY)
+npx tsx scripts/test-buy-vpreca.ts
+
+# Boltz API 診断
+npx tsx scripts/diagnose-boltz.ts
+```
+
+### 前提条件 (手動セットアップ)
+
+1. clw.cash アカウント作成 → `CLW_SESSION_TOKEN` 等を `.env` に設定
+2. Ark ウォレットに BTC を入金 (`ark_get_address` で取得した boarding address へ送金)
+3. onboard 実行で boarding UTXO を offchain vTXO に変換
+4. `tiero/claw-cash` を `cachet-jp` org に fork → git submodule として追加
+
+---
 
 ## デプロイ手順
 
