@@ -20,3 +20,9 @@ claude_desktop_config_patch.json
 
 # Logs
 *.log
+
+# purchasing-agent
+purchasing-agent/node_modules/
+purchasing-agent/dist/
+purchasing-agent/.env
+purchasing-agent/storage-state/
