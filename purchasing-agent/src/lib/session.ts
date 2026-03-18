@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "playwright";
 import { getBrowser } from "./browser.js";
 import { CHROME_USER_AGENT } from "./user-agent.js";
 import { STEALTH_INIT_SCRIPT } from "./stealth.js";
+import { createHumanCursor, type CursorHolder } from "./mouse.js";
 import type { AmazonPageState } from "../types.js";
 
 /**
@@ -14,6 +15,8 @@ export interface ActiveSession {
   context: BrowserContext;
   step: AmazonPageState;
   credentials?: { email: string; password: string };
+  /** Human-like cursor for anti-bot mouse movements */
+  cursor: CursorHolder;
 }
 
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -50,10 +53,14 @@ export async function createSession(): Promise<ActiveSession> {
 
   const page = await context.newPage();
 
+  // Initialize human-like cursor (falls back to NullCursor on failure)
+  const cursor = await createHumanCursor(page);
+
   _session = {
     page,
     context,
     step: "registration_form",
+    cursor,
   };
   resetTimer();
   return _session;
