@@ -41,6 +41,12 @@ const configSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((v) => v === "true"),
+
+  // Mouse emulation (Bezier curve mouse movements for anti-bot)
+  MOUSE_EMULATION: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
 });
 
 export type Config = z.infer<typeof configSchema>;

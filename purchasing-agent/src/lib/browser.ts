@@ -1,5 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { getConfig } from "./config.js";
+import { createHumanCursor, humanTypeV2, type CursorHolder } from "./mouse.js";
 
 let _browser: Browser | null = null;
 
@@ -55,16 +56,31 @@ export async function humanDelay(
 
 /**
  * Type text into a field with human-like timing.
- * Clicks the element first, waits briefly, then types char-by-char
- * with a randomized per-keystroke delay (50-150ms).
+ * When a CursorHolder is provided, uses Bezier-curve mouse movement
+ * before typing. Otherwise falls back to synthetic click + type.
  */
 export async function humanType(
   page: Page,
   selector: string,
   text: string,
+  cursor?: CursorHolder,
 ): Promise<void> {
+  if (cursor) {
+    await humanTypeV2(cursor, selector, text);
+    return;
+  }
+  // Legacy fallback (no cursor)
   const el = page.locator(selector).first();
   await el.click();
   await humanDelay(200, 500);
   await el.pressSequentially(text, { delay: 50 + Math.random() * 100 });
+}
+
+/** Create a new page with an attached human-like cursor */
+export async function newPageWithCursor(
+  storageStatePath?: string,
+): Promise<{ page: Page; cursor: CursorHolder }> {
+  const page = await newPage(storageStatePath);
+  const cursor = await createHumanCursor(page);
+  return { page, cursor };
 }
