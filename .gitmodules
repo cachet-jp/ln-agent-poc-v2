@@ -1,3 +1,6 @@
 [submodule "claw-cash"]
 	path = claw-cash
 	url = https://github.com/cachet-jp/claw-cash.git
+[submodule "btc-temple-monk"]
+	path = btc-temple-monk
+	url = https://github.com/cachet-jp/btc-temple-monk.git
