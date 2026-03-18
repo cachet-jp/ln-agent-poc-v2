@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { newPage, humanDelay } from "../lib/browser.js";
+import { newPage, newPageWithCursor, humanDelay } from "../lib/browser.js";
+import { humanClick, humanScroll, browsePage, humanDelayWithJitter } from "../lib/mouse.js";
 import { getConfig } from "../lib/config.js";
 import type { AmazonPurchaseResult } from "../types.js";
 import { existsSync } from "node:fs";
@@ -98,33 +99,35 @@ export function registerAmazonTools(server: McpServer): void {
       }
 
       let page;
+      let cursor;
       try {
-        page = await newPage();
+        ({ page, cursor } = await newPageWithCursor());
         await page.goto(`${AMAZON_BASE}/ap/signin`, { waitUntil: "networkidle" });
-        await humanDelay();
+        await browsePage(cursor);
 
-        // Enter email
+        // Enter email with human-like cursor movement
         const emailInput = page.locator('#ap_email, input[name="email"]').first();
+        await humanClick(cursor, '#ap_email, input[name="email"]');
         await emailInput.fill(config.AMAZON_EMAIL);
-        await humanDelay(300, 800);
+        await humanDelayWithJitter(cursor, 300, 800);
 
         // Click continue
         const continueBtn = page.locator('#continue, input[id="continue"]').first();
         if (await continueBtn.isVisible()) {
-          await continueBtn.click();
-          await humanDelay();
+          await humanClick(cursor, '#continue, input[id="continue"]');
+          await humanDelayWithJitter(cursor);
         }
 
-        // Enter password
+        // Enter password with human-like cursor movement
         const passwordInput = page.locator('#ap_password, input[name="password"]').first();
         await passwordInput.waitFor({ timeout: 10000 });
+        await humanClick(cursor, '#ap_password, input[name="password"]');
         await passwordInput.fill(config.AMAZON_PASSWORD);
-        await humanDelay(300, 800);
+        await humanDelayWithJitter(cursor, 300, 800);
 
         // Click sign in
-        const signInBtn = page.locator('#signInSubmit, input[name="signIn"]').first();
-        await signInBtn.click();
-        await humanDelay(2000, 4000);
+        await humanClick(cursor, '#signInSubmit, input[name="signIn"]');
+        await humanDelayWithJitter(cursor, 2000, 4000);
 
         // Check for 2FA / captcha
         const page2FA = page.locator('#auth-mfa-otpcode, #captchacharacters');
@@ -208,22 +211,23 @@ export function registerAmazonTools(server: McpServer): void {
       }
 
       let page;
+      let cursor;
       try {
-        page = await newPage(STORAGE_STATE_PATH);
+        ({ page, cursor } = await newPageWithCursor(STORAGE_STATE_PATH));
 
         // Navigate to payment methods
         await page.goto(`${AMAZON_BASE}/cpe/managepaymentmethods`, {
           waitUntil: "networkidle",
         });
-        await humanDelay();
+        await browsePage(cursor);
 
         // Click "Add a payment method" / "お支払い方法を追加"
         const addBtn = page.locator(
           'a:has-text("追加"), a:has-text("Add"), [data-action="add-payment-method"]',
         ).first();
         if (await addBtn.isVisible()) {
-          await addBtn.click();
-          await humanDelay();
+          await humanClick(cursor, 'a:has-text("追加"), a:has-text("Add"), [data-action="add-payment-method"]');
+          await humanDelayWithJitter(cursor);
         }
 
         // Select credit/debit card option
@@ -231,25 +235,27 @@ export function registerAmazonTools(server: McpServer): void {
           'a:has-text("クレジットまたはデビットカード"), a:has-text("Credit or debit card")',
         ).first();
         if (await cardOption.isVisible()) {
-          await cardOption.click();
-          await humanDelay();
+          await humanClick(cursor, 'a:has-text("クレジットまたはデビットカード"), a:has-text("Credit or debit card")');
+          await humanDelayWithJitter(cursor);
         }
 
-        // Fill card details
+        // Fill card details with cursor movement
         const cardInput = page.locator(
           'input[name*="cardNumber"], input[name*="addCreditCardNumber"], #addCreditCardNumber',
         ).first();
         await cardInput.waitFor({ timeout: 10000 });
+        await humanClick(cursor, 'input[name*="cardNumber"], input[name*="addCreditCardNumber"], #addCreditCardNumber');
         await cardInput.fill(cardNumber);
-        await humanDelay(200, 500);
+        await humanDelayWithJitter(cursor, 200, 500);
 
         // Cardholder name
         const nameInput = page.locator(
           'input[name*="cardholderName"], input[name*="accountHolderName"]',
         ).first();
         if (await nameInput.isVisible()) {
+          await humanClick(cursor, 'input[name*="cardholderName"], input[name*="accountHolderName"]');
           await nameInput.fill(cardholderName);
-          await humanDelay(200, 500);
+          await humanDelayWithJitter(cursor, 200, 500);
         }
 
         // Security code
@@ -257,16 +263,14 @@ export function registerAmazonTools(server: McpServer): void {
           'input[name*="securityCode"], input[name*="verificationNumber"]',
         ).first();
         if (await cvvInput.isVisible()) {
+          await humanClick(cursor, 'input[name*="securityCode"], input[name*="verificationNumber"]');
           await cvvInput.fill(securityCode);
-          await humanDelay(200, 500);
+          await humanDelayWithJitter(cursor, 200, 500);
         }
 
         // Submit
-        const submitBtn = page.locator(
-          'input[name*="addCreditCard"], button:has-text("追加"), button:has-text("Add")',
-        ).first();
-        await submitBtn.click();
-        await humanDelay(2000, 4000);
+        await humanClick(cursor, 'input[name*="addCreditCard"], button:has-text("追加"), button:has-text("Add")');
+        await humanDelayWithJitter(cursor, 2000, 4000);
 
         // Save updated session
         await page.context().storageState({ path: STORAGE_STATE_PATH });
@@ -319,12 +323,13 @@ export function registerAmazonTools(server: McpServer): void {
       }
 
       let page;
+      let cursor;
       try {
-        page = await newPage(STORAGE_STATE_PATH);
+        ({ page, cursor } = await newPageWithCursor(STORAGE_STATE_PATH));
 
         // 1. Go to product page
         await page.goto(itemUrl, { waitUntil: "networkidle" });
-        await humanDelay();
+        await browsePage(cursor);
 
         // Get item name for the result
         const itemName =
@@ -338,7 +343,7 @@ export function registerAmazonTools(server: McpServer): void {
             .textContent()
             .catch(() => null)) ?? "Unknown price";
 
-        // 2. Add to cart
+        // 2. Add to cart (scroll to button first, then click with cursor)
         const addToCartBtn = page.locator("#add-to-cart-button").first();
         if (!(await addToCartBtn.isVisible())) {
           await page.context().close();
@@ -352,19 +357,17 @@ export function registerAmazonTools(server: McpServer): void {
             isError: true,
           };
         }
-        await addToCartBtn.click();
-        await humanDelay(1500, 3000);
+        await humanScroll(cursor, { target: "#add-to-cart-button" });
+        await humanClick(cursor, "#add-to-cart-button");
+        await humanDelayWithJitter(cursor, 1500, 3000);
 
         // 3. Go to cart
         await page.goto(`${AMAZON_BASE}/gp/cart/view.html`, { waitUntil: "networkidle" });
-        await humanDelay();
+        await browsePage(cursor);
 
         // 4. Proceed to checkout
-        const checkoutBtn = page.locator(
-          '#sc-buy-box-ptc-button input, [name="proceedToRetailCheckout"]',
-        ).first();
-        await checkoutBtn.click();
-        await humanDelay(2000, 4000);
+        await humanClick(cursor, '#sc-buy-box-ptc-button input, [name="proceedToRetailCheckout"]');
+        await humanDelayWithJitter(cursor, 2000, 4000);
 
         // 5. Place order (the final "Place your order" button)
         // IMPORTANT: This is the irreversible step
@@ -372,8 +375,8 @@ export function registerAmazonTools(server: McpServer): void {
           '#submitOrderButtonId input, #placeYourOrder input, [name="placeYourOrder1"]',
         ).first();
         await placeOrderBtn.waitFor({ timeout: 15000 });
-        await placeOrderBtn.click();
-        await humanDelay(3000, 6000);
+        await humanClick(cursor, '#submitOrderButtonId input, #placeYourOrder input, [name="placeYourOrder1"]');
+        await humanDelayWithJitter(cursor, 3000, 6000);
 
         // 6. Extract order ID from confirmation page
         const orderIdText = await page.textContent("body");

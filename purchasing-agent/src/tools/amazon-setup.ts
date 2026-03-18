@@ -3,6 +3,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { humanDelay, humanType } from "../lib/browser.js";
+import {
+  humanClick,
+  humanScroll,
+  browsePage,
+  humanDelayWithJitter,
+} from "../lib/mouse.js";
 import { generatePassword } from "../lib/password.js";
 import { CHROME_USER_AGENT } from "../lib/user-agent.js";
 import { STEALTH_INIT_SCRIPT } from "../lib/stealth.js";
@@ -351,11 +357,11 @@ export function registerAmazonSetupTools(server: McpServer): void {
 
       // === Playwright backend (original, may trigger bot detection) ===
       try {
-        // Create a persistent session
+        // Create a persistent session (includes human-like cursor)
         const session = await createSession();
         setCredentials(email, password);
 
-        const { page } = session;
+        const { page, cursor } = session;
 
         // === New unified Amazon sign-in/register flow ===
         // Step 1: Go to homepage first (direct /ap/register no longer works)
@@ -363,32 +369,30 @@ export function registerAmazonSetupTools(server: McpServer): void {
           waitUntil: "domcontentloaded",
           timeout: 30000,
         });
-        await humanDelay(1500, 3000);
+        // Simulate browsing the page before taking action
+        await browsePage(cursor);
 
-        // Step 2: Click sign-in link on the nav bar
+        // Step 2: Click sign-in link on the nav bar (Bezier-curve mouse path)
         const accountLink = page
           .locator("#nav-link-accountList")
           .first();
         await accountLink.waitFor({ timeout: 10000 });
-        await accountLink.click();
+        await humanClick(cursor, "#nav-link-accountList");
         await page.waitForLoadState("domcontentloaded");
-        await humanDelay(1500, 3000);
+        await humanDelayWithJitter(cursor, 1500, 3000);
 
         // Step 3: Enter email in the unified sign-in field (human-like typing)
         await page
           .locator('#ap_email, input[type="email"], input[name="email"]')
           .first()
           .waitFor({ timeout: 10000 });
-        await humanType(page, '#ap_email, input[type="email"], input[name="email"]', email);
-        await humanDelay(300, 600);
+        await humanType(page, '#ap_email, input[type="email"], input[name="email"]', email, cursor);
+        await humanDelayWithJitter(cursor, 300, 600);
 
         // Click "次に進む" (Continue)
-        const continueBtn = page
-          .locator("#continue, input[id='continue']")
-          .first();
-        await continueBtn.click();
+        await humanClick(cursor, "#continue, input[id='continue']");
         await page.waitForLoadState("domcontentloaded");
-        await humanDelay(2000, 4000);
+        await humanDelayWithJitter(cursor, 2000, 4000);
 
         // Step 4: Handle the intent confirmation page
         // "Amazonを初めてご利用のようです" → Click "アカウントの作成に進む"
@@ -400,37 +404,37 @@ export function registerAmazonSetupTools(server: McpServer): void {
           )
           .first();
         if (await createBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-          await createBtn.click();
+          await humanClick(cursor, 'span:has-text("アカウントの作成に進む"), button:has-text("アカウントの作成"), a:has-text("アカウントの作成")');
           await page.waitForLoadState("domcontentloaded");
-          await humanDelay(2000, 4000);
+          await humanDelayWithJitter(cursor, 2000, 4000);
         }
 
-        // Step 5: Fill the registration form (human-like typing)
+        // Step 5: Fill the registration form (human-like typing with cursor)
         await page
           .locator('#ap_customer_name, input[name="customerName"]')
           .first()
           .waitFor({ timeout: 10000 });
-        await humanType(page, '#ap_customer_name, input[name="customerName"]', name);
-        await humanDelay(300, 600);
+        await humanType(page, '#ap_customer_name, input[name="customerName"]', name, cursor);
+        await humanDelayWithJitter(cursor, 300, 600);
 
         // Email may be pre-filled; re-fill if empty
         const emailValue = await page.locator("#ap_email").first()
           .inputValue()
           .catch(() => "");
         if (!emailValue) {
-          await humanType(page, "#ap_email", email);
-          await humanDelay(300, 600);
+          await humanType(page, "#ap_email", email, cursor);
+          await humanDelayWithJitter(cursor, 300, 600);
         }
 
-        // Fill password (human-like)
-        await humanType(page, "#ap_password", password);
-        await humanDelay(300, 600);
+        // Fill password (human-like with cursor movement)
+        await humanType(page, "#ap_password", password, cursor);
+        await humanDelayWithJitter(cursor, 300, 600);
 
         // Fill password confirmation (if visible)
         const passwordCheckInput = page.locator("#ap_password_check").first();
         if (await passwordCheckInput.isVisible().catch(() => false)) {
-          await humanType(page, "#ap_password_check", password);
-          await humanDelay(300, 600);
+          await humanType(page, "#ap_password_check", password, cursor);
+          await humanDelayWithJitter(cursor, 300, 600);
         }
 
         // Submit the registration form
@@ -440,8 +444,8 @@ export function registerAmazonSetupTools(server: McpServer): void {
           )
           .first();
         if (await submitBtn.isVisible().catch(() => false)) {
-          await submitBtn.click();
-          await humanDelay(2000, 4000);
+          await humanClick(cursor, '#continue, input[type="submit"], #auth-create-account-link');
+          await humanDelayWithJitter(cursor, 2000, 4000);
         }
 
         // Detect new page state
@@ -480,49 +484,35 @@ export function registerAmazonSetupTools(server: McpServer): void {
     async ({ input }) => {
       try {
         const session = requireSession();
-        const { page, step } = session;
+        const { page, step, cursor } = session;
 
         switch (step) {
           case "captcha": {
-            // Fill CAPTCHA input
-            const captchaInput = page
-              .locator("#captchacharacters, #auth-captcha-guess")
-              .first();
+            // Fill CAPTCHA input with human-like cursor movement
+            const captchaSelector = "#captchacharacters, #auth-captcha-guess";
+            const captchaInput = page.locator(captchaSelector).first();
             await captchaInput.waitFor({ timeout: 5000 });
-            await captchaInput.fill(input);
-            await humanDelay(300, 600);
+            await humanType(page, captchaSelector, input, cursor);
+            await humanDelayWithJitter(cursor, 300, 600);
 
             // Submit
-            const submitBtn = page
-              .locator(
-                'button[type="submit"], .a-button-input, input[type="submit"]',
-              )
-              .first();
-            await submitBtn.click();
-            await humanDelay(2000, 4000);
+            await humanClick(cursor, 'button[type="submit"], .a-button-input, input[type="submit"]');
+            await humanDelayWithJitter(cursor, 2000, 4000);
             break;
           }
 
           case "email_otp":
           case "sms_otp": {
-            // Fill OTP code
-            const otpInput = page
-              .locator(
-                "#cvf-input-code, #auth-mfa-otpcode, input[name='code']",
-              )
-              .first();
+            // Fill OTP code with human-like cursor movement
+            const otpSelector = "#cvf-input-code, #auth-mfa-otpcode, input[name='code']";
+            const otpInput = page.locator(otpSelector).first();
             await otpInput.waitFor({ timeout: 5000 });
-            await otpInput.fill(input);
-            await humanDelay(300, 600);
+            await humanType(page, otpSelector, input, cursor);
+            await humanDelayWithJitter(cursor, 300, 600);
 
             // Submit
-            const submitBtn = page
-              .locator(
-                "#cvf-submit-otp-button, button[type='submit'], .a-button-input, input[type='submit']",
-              )
-              .first();
-            await submitBtn.click();
-            await humanDelay(2000, 4000);
+            await humanClick(cursor, "#cvf-submit-otp-button, button[type='submit'], .a-button-input, input[type='submit']");
+            await humanDelayWithJitter(cursor, 2000, 4000);
             break;
           }
 

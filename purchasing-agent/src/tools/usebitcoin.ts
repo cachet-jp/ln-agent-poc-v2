@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { newPage, humanDelay } from "../lib/browser.js";
+import { newPageWithCursor, humanDelay } from "../lib/browser.js";
+import { humanClick, browsePage, humanDelayWithJitter } from "../lib/mouse.js";
 import { payLightningInvoice } from "../lib/clw-client.js";
 import { getConfig } from "../lib/config.js";
 import type { VPrecaCode } from "../types.js";
@@ -45,38 +46,34 @@ export function registerUseBitcoinTools(server: McpServer): void {
       }
 
       let page;
+      let cursor;
       try {
-        page = await newPage();
+        ({ page, cursor } = await newPageWithCursor());
 
         // 1. Navigate directly to the V-Preca product page for the chosen amount
-        //    URL: /ja/products/vpricagift/vpreca-{amount}
         const productUrl = `${USEBITCOIN_BASE}/ja/products/vpricagift/vpreca-${amount}`;
         await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-        await humanDelay();
+        await browsePage(cursor);
 
         // 2. Select quantity = 1 (default), accept terms, and proceed
-        //    UseBitcoin uses React Aria components (role-based selectors)
-
-        // Accept terms checkbox — uses custom React Aria styling
         const termsLabel = page.getByText("利用規約に同意します");
         if (await termsLabel.isVisible({ timeout: 5000 }).catch(() => false)) {
-          await termsLabel.click();
-          await humanDelay(300, 600);
+          await humanClick(cursor, 'text="利用規約に同意します"');
+          await humanDelayWithJitter(cursor, 300, 600);
         } else {
           const termsCheckbox = page.getByRole("checkbox").first();
           if (await termsCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
             await termsCheckbox.click({ force: true });
-            await humanDelay(300, 600);
+            await humanDelayWithJitter(cursor, 300, 600);
           }
         }
 
         // 3. Click "購入へ進む" (proceed to purchase) button
-        //    This navigates to the payment page showing QR code + Lightning invoice
         const proceedButton = page
           .getByRole("button", { name: /購入へ進む|購入|proceed/i })
           .first();
         await proceedButton.waitFor({ timeout: 10000 });
-        await proceedButton.click();
+        await humanClick(cursor, 'button:has-text("購入へ進む"), button:has-text("購入")');
 
         // 4. Wait for payment page to load (shows invoice + QR code)
         await page.waitForSelector('text=/インボイスをコピー|sats/i', {
