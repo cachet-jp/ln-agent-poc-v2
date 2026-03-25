@@ -87,6 +87,30 @@ export interface ProofStateResult {
   amount: number;
 }
 
+export interface MintInvoiceResult {
+  /** Mint quote ID — needed to check status and claim proofs */
+  quoteId: string;
+  /** BOLT11 Lightning invoice to pay */
+  bolt11: string;
+  /** Amount in sats */
+  amount: number;
+  /** QR code as PNG base64 data URL (data:image/png;base64,...) */
+  qrDataUrl: string;
+  /** Quote expiry (unix timestamp) */
+  expiry: number;
+}
+
+export interface MintInvoiceCheckResult {
+  /** Quote ID */
+  quoteId: string;
+  /** Current state: UNPAID, PAID, ISSUED */
+  state: string;
+  /** Whether proofs have been claimed and added to wallet */
+  claimed: boolean;
+  /** Amount of proofs claimed (0 if not yet claimed) */
+  amount: number;
+}
+
 // ---------------------------------------------------------------------------
 // Lazy singleton
 // ---------------------------------------------------------------------------
@@ -332,6 +356,86 @@ export async function checkProofStates(): Promise<ProofStateResult[]> {
   }
 
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// Mint invoice (Lightning → Cashu top-up)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a Lightning invoice via Cashu mint for topping up the ecash wallet.
+ *
+ * Anyone can pay this invoice (from any Lightning wallet).
+ * After payment, call `claimMintInvoice(quoteId)` to claim the ecash proofs.
+ */
+export async function createMintInvoice(amountSats: number): Promise<MintInvoiceResult> {
+  const cfg = getCashuConfig();
+  const mintUrl = getMintUrl();
+
+  // Check balance limit
+  const currentBalance = await getTotalBalance(mintUrl);
+  if (currentBalance + amountSats > cfg.CASHU_MAX_BALANCE_SATS) {
+    throw new Error(
+      `Minting ${amountSats} sats would exceed CASHU_MAX_BALANCE_SATS (${cfg.CASHU_MAX_BALANCE_SATS}). ` +
+        `Current balance: ${currentBalance} sats.`,
+    );
+  }
+
+  const wallet = await getCashuWallet();
+
+  // Request mint quote — mint returns a Lightning invoice
+  const mintQuote = await wallet.createMintQuoteBolt11(amountSats);
+
+  // Generate QR code from bolt11 invoice
+  const QRCode = await import("qrcode");
+  const qrDataUrl = await QRCode.toDataURL(mintQuote.request.toUpperCase(), {
+    type: "image/png",
+    width: 400,
+    margin: 2,
+    errorCorrectionLevel: "M",
+  });
+
+  return {
+    quoteId: mintQuote.quote,
+    bolt11: mintQuote.request,
+    amount: amountSats,
+    qrDataUrl,
+    expiry: mintQuote.expiry,
+  };
+}
+
+/**
+ * Check if a mint invoice has been paid and claim the ecash proofs.
+ *
+ * Call this after `createMintInvoice()` once the Lightning invoice is paid.
+ * Can be called multiple times safely — only claims once.
+ */
+export async function claimMintInvoice(quoteId: string, amountSats: number): Promise<MintInvoiceCheckResult> {
+  const mintUrl = getMintUrl();
+  const wallet = await getCashuWallet();
+
+  // Check quote status
+  const quote = await wallet.checkMintQuoteBolt11(quoteId);
+
+  if (quote.state === "UNPAID") {
+    return { quoteId, state: "UNPAID", claimed: false, amount: 0 };
+  }
+
+  if (quote.state === "ISSUED") {
+    // Already claimed in a previous call
+    return { quoteId, state: "ISSUED", claimed: true, amount: amountSats };
+  }
+
+  if (quote.state === "PAID") {
+    // Payment confirmed — claim proofs from mint
+    const proofs = await wallet.mintProofsBolt11(amountSats, quoteId);
+    await addProofs(mintUrl, proofs);
+
+    const claimedAmount = proofs.reduce((sum, p) => sum + p.amount, 0);
+    return { quoteId, state: "ISSUED", claimed: true, amount: claimedAmount };
+  }
+
+  return { quoteId, state: quote.state, claimed: false, amount: 0 };
 }
 
 /** Get information about the configured Cashu mint. */
