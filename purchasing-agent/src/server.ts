@@ -25,14 +25,19 @@ if (config.CASHU_MINT_URL) {
   registerCashuTools(server);
 }
 
-// Ark & UsebitCoin tools — depend on claw-cash submodule; skip if unavailable
+// UseBitcoin tools — work with Cashu-only (no Ark required) or Ark+Cashu
+// Payment strategy auto-selects: Cashu melt if funded, Ark fallback otherwise.
+{
+  const { registerUseBitcoinTools } = await import("./tools/usebitcoin.js");
+  registerUseBitcoinTools(server);
+}
+
+// Ark wallet tools — depend on claw-cash submodule; skip if unavailable
 try {
   const { registerArkTools } = await import("./tools/ark-wallet.js");
-  const { registerUseBitcoinTools } = await import("./tools/usebitcoin.js");
   registerArkTools(server);
-  registerUseBitcoinTools(server);
 } catch (err) {
-  console.error(`[purchasing-agent] Ark/UsebitCoin tools unavailable: ${(err as Error).message}`);
+  console.error(`[purchasing-agent] Ark tools unavailable (Cashu-only mode): ${(err as Error).message}`);
 }
 
 // Amazon tools — only registered when credentials are configured (Phase 1+)
