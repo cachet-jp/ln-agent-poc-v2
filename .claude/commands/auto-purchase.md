@@ -1,6 +1,6 @@
-# /auto-purchase - BTC で V-Preca を購入
+# /auto-purchase - BTC でギフトカードを購入
 
-Ark ウォレットの BTC を使って、Lightning 支払いで V-Preca ギフトカードを購入します。
+Cashu ecash または Ark ウォレットの BTC を使って、Lightning 支払いでギフトカードを自動購入します。
 
 ## Instructions
 
@@ -12,18 +12,22 @@ Ark ウォレットの BTC を使って、Lightning 支払いで V-Preca ギフ�
 
 ---
 
-**BTC → V-Preca 購入フロー**
+**BTC → ギフトカード購入フロー**
 
 以下のステップを自動で実行します:
 
-1. Ark ウォレット残高確認
-2. V-Preca 金額を選択
+1. ウォレット残高確認（Cashu / Ark）
+2. 商品と金額を選択
 3. UseBitcoin.jp で Lightning 支払い
-4. V-Preca コード取得
+4. ギフトコード取得
 
-**必要なもの:**
-- `.env` に clw.cash の認証情報が設定済みであること
-- Ark ウォレットに十分な BTC 残高があること
+**購入可能な商品:**
+- Kyash ギフトコード (¥500〜¥50,000)
+- V-Preca ギフト (¥500〜¥100,000)
+- QUO カード Pay (¥500〜¥10,000)
+- au PAY ギフト (¥1,000〜¥50,000)
+- DMM ポイントコード (¥2,000〜¥100,000)
+- ビットキャッシュ (¥1,500〜¥50,000)
 
 **現在の安全制限:**
 - 1回の購入上限: `MAX_SPEND_JPY` (デフォルト ¥5,000)
@@ -38,30 +42,33 @@ Ark ウォレットの BTC を使って、Lightning 支払いで V-Preca ギフ�
 
 #### 2a. 残高確認
 
-`ark_get_balance` を呼び出し、残高を表示:
+1. `cashu_get_balance` で Cashu ecash 残高を確認
+2. Ark が利用可能なら `ark_get_balance` も確認
+3. 残高が 0 の場合は入金方法を案内して中断
 
 ```
-Ark ウォレット残高:
-  Off-chain: XX,XXX sats (0.000XXXXX BTC)
-  On-chain:  XX,XXX sats (0.000XXXXX BTC)
+ウォレット残高:
+  Cashu:    XX,XXX sats (0.000XXXXX BTC)
+  Ark:      XX,XXX sats (利用可能な場合)
 ```
 
-残高が 0 の場合は `ark_get_address` で入金アドレスを表示して中断。
+#### 2b. 商品選択
 
-#### 2b. V-Preca 購入
+ユーザーに購入する商品と金額を確認。
+`usebitcoin_list_products` で一覧を表示してもよい。
 
-ユーザーに購入する V-Preca の金額を確認:
-- 選択肢: ¥500, ¥1,000, ¥2,000, ¥3,000, ¥5,000, ¥10,000, ¥20,000, ¥30,000, ¥50,000, ¥100,000
-- MAX_SPEND_JPY を超える金額はブロックされる
+#### 2c. 購入実行
 
-確認後に `usebitcoin_buy_vpreca` を呼び出す。
+`usebitcoin_buy_gift_card` を呼び出す:
+- `product`: 商品タイプ
+- `amount`: 金額 (JPY)
 
 ```
-V-Preca 購入中...
-  金額: ¥X,XXX
-  Lightning invoice 生成中...
-  支払い中...
-  完了！V-Preca コードを取得しました。
+ギフトカード購入中...
+  商品: Kyash ギフトコード ¥1,000
+  Lightning invoice 取得中...
+  Cashu で支払い中...
+  完了！ギフトコードを取得しました。
 ```
 
 ### Step 3: 結果サマリー
@@ -69,20 +76,20 @@ V-Preca 購入中...
 全フロー完了後、まとめを表示:
 
 ```
-=== V-Preca 購入完了 ===
+=== ギフトカード購入完了 ===
+  商品: Kyash ギフトコード
+  金額: ¥1,000
+  ギフトコード: XXXXXXXXXX
   BTC 支払額: XX,XXX sats
-  V-Preca 金額: ¥X,XXX
-  Ark 残高 (購入後): XX,XXX sats
+  支払方法: Cashu
+  残高 (購入後): XX,XXX sats
 ```
-
-※ V-Preca のカード番号・セキュリティコードはセキュリティのためチャットに表示しません。
-  購入完了後、UseBitcoin.jp のマイページから確認してください。
 
 ## Error Handling
 
 - 各ステップでエラーが発生した場合は即座に中断し、エラー内容を日本語で報告
 - 「リトライしますか？」と確認してから再実行
-- V-Preca のカード番号・セキュリティコードはチャットに表示しない (セキュリティ)
+- Cashu 残高不足時は Cashu トークン受取 or Ark からのチャージを提案
 
 ## Prerequisites
 
