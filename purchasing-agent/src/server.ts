@@ -10,8 +10,6 @@ if (!("EventSource" in globalThis)) {
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerArkTools } from "./tools/ark-wallet.js";
-import { registerUseBitcoinTools } from "./tools/usebitcoin.js";
 import { getConfig } from "./lib/config.js";
 
 const server = new McpServer({
@@ -19,23 +17,34 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
-// Core tools — always available
-registerArkTools(server);
-registerUseBitcoinTools(server);
-
-// Cashu tools — available when CASHU_MINT_URL is configured
 const config = getConfig();
+
+// Cashu tools — available when CASHU_MINT_URL is configured (no claw-cash dependency)
 if (config.CASHU_MINT_URL) {
   const { registerCashuTools } = await import("./tools/cashu-wallet.js");
   registerCashuTools(server);
 }
 
+// Ark & UsebitCoin tools — depend on claw-cash submodule; skip if unavailable
+try {
+  const { registerArkTools } = await import("./tools/ark-wallet.js");
+  const { registerUseBitcoinTools } = await import("./tools/usebitcoin.js");
+  registerArkTools(server);
+  registerUseBitcoinTools(server);
+} catch (err) {
+  console.error(`[purchasing-agent] Ark/UsebitCoin tools unavailable: ${(err as Error).message}`);
+}
+
 // Amazon tools — only registered when credentials are configured (Phase 1+)
 if (config.AMAZON_EMAIL && config.AMAZON_PASSWORD) {
-  const { registerAmazonTools } = await import("./tools/amazon.js");
-  const { registerAmazonSetupTools } = await import("./tools/amazon-setup.js");
-  registerAmazonTools(server);
-  registerAmazonSetupTools(server);
+  try {
+    const { registerAmazonTools } = await import("./tools/amazon.js");
+    const { registerAmazonSetupTools } = await import("./tools/amazon-setup.js");
+    registerAmazonTools(server);
+    registerAmazonSetupTools(server);
+  } catch (err) {
+    console.error(`[purchasing-agent] Amazon tools unavailable: ${(err as Error).message}`);
+  }
 }
 
 // Start server with stdio transport
