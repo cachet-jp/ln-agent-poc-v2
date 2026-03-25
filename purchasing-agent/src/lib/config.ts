@@ -33,6 +33,15 @@ const configSchema = z.object({
   CLW_PUBLIC_KEY: optStr,
   CLW_ARK_SERVER_URL: optUrl,
 
+  // Cashu ecash
+  CASHU_MINT_URL: optUrl,
+  CASHU_STORE_KEY: optStr,
+  CASHU_MAX_BALANCE_SATS: z.coerce.number().positive().default(1_000_000),
+  CASHU_PREFERRED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+
   // Guardrails
   MAX_SPEND_JPY: z.coerce.number().positive().default(5000),
 
