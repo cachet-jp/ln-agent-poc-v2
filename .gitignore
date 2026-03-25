@@ -26,3 +26,4 @@ purchasing-agent/node_modules/
 purchasing-agent/dist/
 purchasing-agent/.env
 purchasing-agent/storage-state/
+purchasing-agent/data/

@@ -23,8 +23,14 @@ const server = new McpServer({
 registerArkTools(server);
 registerUseBitcoinTools(server);
 
-// Amazon tools — only registered when credentials are configured (Phase 1+)
+// Cashu tools — available when CASHU_MINT_URL is configured
 const config = getConfig();
+if (config.CASHU_MINT_URL) {
+  const { registerCashuTools } = await import("./tools/cashu-wallet.js");
+  registerCashuTools(server);
+}
+
+// Amazon tools — only registered when credentials are configured (Phase 1+)
 if (config.AMAZON_EMAIL && config.AMAZON_PASSWORD) {
   const { registerAmazonTools } = await import("./tools/amazon.js");
   const { registerAmazonSetupTools } = await import("./tools/amazon-setup.js");

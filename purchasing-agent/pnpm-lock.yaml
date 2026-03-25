@@ -14,6 +14,9 @@ importers:
       '@arkade-os/sdk':
         specifier: ^0.3.12
         version: 0.3.13
+      '@cashu/cashu-ts':
+        specifier: ^3.6.1
+        version: 3.6.1
       '@clw-cash/sdk':
         specifier: link:../claw-cash/remote-signer-identity
         version: link:../claw-cash/remote-signer-identity
@@ -55,6 +58,10 @@ packages:
   '@arkade-os/sdk@0.3.13':
     resolution: {integrity: sha512-eC6XGifqVf2Xu+sf/3T2duUgLiXlgh/IQXHD+v09wsu8ik/CZedH4gvQpetTjRMKti3DdY/QVLC1OQTKKWgvqQ==}
     engines: {node: '>=20.0.0'}
+
+  '@cashu/cashu-ts@3.6.1':
+    resolution: {integrity: sha512-ynncvX5vv/m2Dzp28m1ApxNsmrsw1p6laOdOnvlHVOPK3x4Nz3K/ScV7UjnbuwubTVeIcKP1FXEdycedhhlJbQ==}
+    engines: {node: '>=22.4.0'}
 
   '@esbuild/aix-ppc64@0.27.3':
     resolution: {integrity: sha512-9fJMTNFTWZMh5qwrBItuziu834eOCUcEqymSH7pY+zoMVEZg3gcPuBNxH1EvfVYe9h0x/Ptw8KBzv7qxb7l8dg==}
@@ -385,6 +392,9 @@ packages:
 
   '@scure/base@2.0.0':
     resolution: {integrity: sha512-3E1kpuZginKkek01ovG8krQ0Z44E3DHPjc5S2rjJw9lZn3KSQOs8S7wqikF/AH7iRanHypj85uGyxk0XAyC37w==}
+
+  '@scure/bip32@2.0.1':
+    resolution: {integrity: sha512-4Md1NI5BzoVP+bhyJaY3K6yMesEFzNS1sE/cP+9nuvE7p/b0kx9XbpDHHFl8dHtufcbdHRUUQdRqLIPHN/s7yA==}
 
   '@scure/btc-signer@2.0.1':
     resolution: {integrity: sha512-vk5a/16BbSFZkhh1JIJ0+4H9nceZVo5WzKvJGGWiPp3sQOExeW+L53z3dI6u0adTPoE8ZbL+XEb6hEGzVZSvvQ==}
@@ -1051,6 +1061,13 @@ snapshots:
       '@scure/btc-signer': 2.0.1
       bip68: 1.0.4
 
+  '@cashu/cashu-ts@3.6.1':
+    dependencies:
+      '@noble/curves': 2.0.1
+      '@noble/hashes': 2.0.1
+      '@scure/base': 2.0.0
+      '@scure/bip32': 2.0.1
+
   '@esbuild/aix-ppc64@0.27.3':
     optional: true
 
@@ -1251,6 +1268,12 @@ snapshots:
   '@scure/base@1.1.1': {}
 
   '@scure/base@2.0.0': {}
+
+  '@scure/bip32@2.0.1':
+    dependencies:
+      '@noble/curves': 2.0.1
+      '@noble/hashes': 2.0.1
+      '@scure/base': 2.0.0
 
   '@scure/btc-signer@2.0.1':
     dependencies:
