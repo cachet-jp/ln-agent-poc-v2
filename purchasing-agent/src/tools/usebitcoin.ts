@@ -1,125 +1,215 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { newPage, humanDelay } from "../lib/browser.js";
-import { payLightningInvoice } from "../lib/clw-client.js";
+import { payBolt11 } from "../lib/payment-strategy.js";
 import { getConfig } from "../lib/config.js";
-import type { VPrecaCode } from "../types.js";
+import type {
+  VPrecaCode,
+  UseBitcoinProduct,
+  ProductCatalog,
+  GiftCardResult,
+} from "../types.js";
 
 const USEBITCOIN_BASE = "https://usebitcoin.jp";
 
-/**
- * Valid V-Preca SKU amounts on UseBitcoin.jp.
- * URL pattern: /ja/products/vpricagift/vpreca-{amount}
- */
-const VALID_AMOUNTS = [500, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000, 100000];
+// ---------------------------------------------------------------------------
+// Product catalog
+// ---------------------------------------------------------------------------
 
+export const PRODUCT_CATALOG: Record<UseBitcoinProduct, ProductCatalog> = {
+  vpreca: {
+    name: "V-Preca ギフト",
+    slug: "vpricagift",
+    skuPrefix: "vpreca",
+    amounts: [500, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000, 100000],
+    description: "Visa プリペイドカード（ネット決済用）",
+  },
+  kyash: {
+    name: "Kyash ギフトコード",
+    slug: "kyash",
+    skuPrefix: "kyash",
+    amounts: [500, 1000, 5000, 10000, 50000],
+    description: "Kyash アプリにチャージして Visa プリペイドとして利用",
+  },
+  quocard: {
+    name: "QUO カード Pay",
+    slug: "quocard",
+    skuPrefix: "quocard",
+    amounts: [500, 1000, 3000, 5000, 10000],
+    description: "コンビニ・書店等で使えるデジタルギフト",
+  },
+  aupay: {
+    name: "au PAY ギフトカード",
+    slug: "aupay",
+    skuPrefix: "aupay",
+    amounts: [1000, 3000, 5000, 10000, 50000],
+    description: "au PAY 残高にチャージして全国の加盟店で利用",
+  },
+  dmm: {
+    name: "DMM ポイントコード",
+    slug: "dmm",
+    skuPrefix: "dmm",
+    amounts: [2000, 5000, 10000, 50000, 100000],
+    description: "DMM.com のサービスで利用可能（8%割引あり）",
+  },
+  bitcash: {
+    name: "ビットキャッシュ",
+    slug: "bitcash",
+    skuPrefix: "bitcash",
+    amounts: [1500, 3000, 5000, 10000, 50000],
+    description: "オンラインゲーム・電子書籍等で利用",
+  },
+};
+
+const ALL_PRODUCT_NAMES = Object.keys(PRODUCT_CATALOG) as UseBitcoinProduct[];
+
+// ---------------------------------------------------------------------------
+// Generic purchase function
+// ---------------------------------------------------------------------------
+
+/**
+ * Buy a gift card on UseBitcoin.jp.
+ * Works for any product in PRODUCT_CATALOG.
+ */
+export async function buyGiftCard(
+  product: UseBitcoinProduct,
+  amount: number,
+): Promise<GiftCardResult> {
+  const catalog = PRODUCT_CATALOG[product];
+  if (!catalog) throw new Error(`Unknown product: ${product}`);
+  if (!catalog.amounts.includes(amount)) {
+    throw new Error(
+      `Invalid amount ${amount} for ${catalog.name}. Valid: ${catalog.amounts.join(", ")}`,
+    );
+  }
+
+  const config = getConfig();
+  if (amount > config.MAX_SPEND_JPY) {
+    throw new Error(
+      `Amount ${amount} JPY exceeds MAX_SPEND_JPY (${config.MAX_SPEND_JPY}).`,
+    );
+  }
+
+  const productUrl = `${USEBITCOIN_BASE}/ja/products/${catalog.slug}/${catalog.skuPrefix}-${amount}`;
+  let page;
+
+  try {
+    page = await newPage();
+
+    // 1. Navigate to product page
+    await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await humanDelay();
+
+    // 2. Accept terms checkbox (React Aria custom component)
+    const termsLabel = page.getByText("利用規約に同意します");
+    if (await termsLabel.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await termsLabel.click();
+      await humanDelay(300, 600);
+    } else {
+      const termsCheckbox = page.getByRole("checkbox").first();
+      if (await termsCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await termsCheckbox.click({ force: true });
+        await humanDelay(300, 600);
+      }
+    }
+
+    // 3. Proceed to purchase
+    const proceedButton = page
+      .getByRole("button", { name: /購入へ進む|購入|proceed/i })
+      .first();
+    await proceedButton.waitFor({ timeout: 10000 });
+    await proceedButton.click();
+
+    // 4. Wait for payment page (Lightning invoice)
+    await page.waitForSelector('text=/インボイスをコピー|sats|lightning/i', {
+      timeout: 30000,
+    });
+    await humanDelay(2000, 3000);
+
+    // 5. Extract BOLT11 invoice
+    const bolt11 = await extractLightningInvoiceFromPage(page);
+    if (!bolt11) {
+      throw new Error("Could not extract Lightning invoice from payment page.");
+    }
+
+    // 6. Pay via payment strategy (auto: Cashu first → Ark fallback)
+    const payResult = await payBolt11(bolt11);
+    if (!payResult.preimage) {
+      throw new Error("Lightning payment failed — no preimage received");
+    }
+
+    // 7. Wait for payment confirmation (SSE → redirect or status text)
+    await Promise.race([
+      page.waitForURL(/\/orders\//, { timeout: 120000 }),
+      page
+        .waitForSelector('text=/完了|fulfilled|success|paid/i', {
+          timeout: 120000,
+        })
+        .catch(() => null),
+    ]);
+    await humanDelay(2000, 4000);
+
+    // 8. Extract gift code(s)
+    const giftData = await extractGiftCodeGeneric(page, product);
+
+    // Extract order ID
+    const orderMatch = page.url().match(/\/orders\/([^/?]+)/);
+    const orderId = orderMatch?.[1] ?? "unknown";
+
+    await page.context().close();
+
+    return {
+      product,
+      code: giftData.code,
+      secondaryCode: giftData.secondaryCode,
+      amount,
+      orderId,
+      preimage: payResult.preimage,
+      paymentMethod: payResult.method as "cashu" | "ark",
+      satsPaid: payResult.amount,
+      fee: payResult.fee,
+    };
+  } catch (err) {
+    if (page) {
+      try {
+        await page.context().close();
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MCP Tool Registration
+// ---------------------------------------------------------------------------
+
+/**
+ * Register the generic `usebitcoin_buy_gift_card` tool + legacy `usebitcoin_buy_vpreca`.
+ */
 export function registerUseBitcoinTools(server: McpServer): void {
+  // ---- Generic multi-product tool ----
   server.tool(
-    "usebitcoin_buy_vpreca",
-    "Buy a V-Preca gift card on UseBitcoin.jp using Lightning payment from Ark wallet. " +
-      "Returns card number and security code. " +
-      `Valid amounts (JPY): ${VALID_AMOUNTS.join(", ")}`,
+    "usebitcoin_buy_gift_card",
+    "Buy a gift card on UseBitcoin.jp using Bitcoin Lightning payment (via Cashu ecash or Ark wallet). " +
+      `Supported products: ${ALL_PRODUCT_NAMES.join(", ")}. ` +
+      "Returns the gift card code, order ID, and payment details.",
     {
+      product: z
+        .enum(ALL_PRODUCT_NAMES as [string, ...string[]])
+        .describe(
+          `Product type: ${ALL_PRODUCT_NAMES.map((p) => `"${p}" (${PRODUCT_CATALOG[p].name})`).join(", ")}`,
+        ),
       amount: z
         .number()
         .int()
-        .refine((v) => VALID_AMOUNTS.includes(v), {
-          message: `Amount must be one of: ${VALID_AMOUNTS.join(", ")}`,
-        })
-        .describe(`V-Preca amount in JPY. Valid: ${VALID_AMOUNTS.join(", ")}`),
+        .positive()
+        .describe("Amount in JPY. Valid amounts depend on product type."),
     },
-    async ({ amount }) => {
-      const config = getConfig();
-
-      // Guardrail check
-      if (amount > config.MAX_SPEND_JPY) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Blocked: amount ${amount} JPY exceeds MAX_SPEND_JPY (${config.MAX_SPEND_JPY}). Increase the limit in .env if needed.`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      let page;
+    async ({ product, amount }) => {
       try {
-        page = await newPage();
-
-        // 1. Navigate directly to the V-Preca product page for the chosen amount
-        //    URL: /ja/products/vpricagift/vpreca-{amount}
-        const productUrl = `${USEBITCOIN_BASE}/ja/products/vpricagift/vpreca-${amount}`;
-        await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-        await humanDelay();
-
-        // 2. Select quantity = 1 (default), accept terms, and proceed
-        //    UseBitcoin uses React Aria components (role-based selectors)
-
-        // Accept terms checkbox — uses custom React Aria styling
-        const termsLabel = page.getByText("利用規約に同意します");
-        if (await termsLabel.isVisible({ timeout: 5000 }).catch(() => false)) {
-          await termsLabel.click();
-          await humanDelay(300, 600);
-        } else {
-          const termsCheckbox = page.getByRole("checkbox").first();
-          if (await termsCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await termsCheckbox.click({ force: true });
-            await humanDelay(300, 600);
-          }
-        }
-
-        // 3. Click "購入へ進む" (proceed to purchase) button
-        //    This navigates to the payment page showing QR code + Lightning invoice
-        const proceedButton = page
-          .getByRole("button", { name: /購入へ進む|購入|proceed/i })
-          .first();
-        await proceedButton.waitFor({ timeout: 10000 });
-        await proceedButton.click();
-
-        // 4. Wait for payment page to load (shows invoice + QR code)
-        await page.waitForSelector('text=/インボイスをコピー|sats/i', {
-          timeout: 30000,
-        });
-        await humanDelay(2000, 3000);
-
-        // 5. Extract bolt11 invoice from payment page DOM
-        const bolt11 = await extractLightningInvoiceFromPage(page);
-        if (!bolt11) {
-          throw new Error(
-            "Could not extract Lightning invoice from payment page.",
-          );
-        }
-
-        // 6. Pay the Lightning invoice via Ark wallet
-        const payResult = await payLightningInvoice(bolt11);
-        if (!payResult.preimage) {
-          throw new Error("Lightning payment failed — no preimage received");
-        }
-
-        // 7. Wait for payment confirmation
-        //    UseBitcoin uses SSE for status updates.
-        //    On success, the page redirects to /orders/{orderId} or shows fulfillment.
-        await Promise.race([
-          page.waitForURL(/\/orders\//, { timeout: 120000 }),
-          page
-            .waitForSelector('text=/完了|fulfilled|success|paid/i', {
-              timeout: 120000,
-            })
-            .catch(() => null),
-        ]);
-        await humanDelay(2000, 4000);
-
-        // 8. Extract the V-Preca code from the order result page
-        const vprecaCode = await extractVPrecaCode(page, amount);
-
-        // Extract order ID from URL if possible
-        const orderMatch = page.url().match(/\/orders\/([^/?]+)/);
-        const orderId = orderMatch?.[1] ?? "unknown";
-
-        await page.context().close();
-
+        const result = await buyGiftCard(product as UseBitcoinProduct, amount);
         return {
           content: [
             {
@@ -127,15 +217,16 @@ export function registerUseBitcoinTools(server: McpServer): void {
               text: JSON.stringify(
                 {
                   success: true,
-                  voucherCode: vprecaCode.voucherCode,
-                  cardLast4: vprecaCode.cardLast4,
-                  amount: vprecaCode.amount,
-                  expiryDate: vprecaCode.expiryDate ?? "not provided",
-                  orderId,
-                  paymentPreimage: payResult.preimage,
-                  // deprecated fields for backward compat
-                  cardNumber: vprecaCode.cardNumber,
-                  securityCode: vprecaCode.securityCode,
+                  product: result.product,
+                  productName: PRODUCT_CATALOG[result.product].name,
+                  code: result.code,
+                  secondaryCode: result.secondaryCode ?? null,
+                  amount: result.amount,
+                  orderId: result.orderId,
+                  paymentPreimage: result.preimage,
+                  paymentMethod: result.paymentMethod,
+                  satsPaid: result.satsPaid,
+                  fee: result.fee ?? 0,
                 },
                 null,
                 2,
@@ -144,13 +235,86 @@ export function registerUseBitcoinTools(server: McpServer): void {
           ],
         };
       } catch (err) {
-        if (page) {
-          try {
-            await page.context().close();
-          } catch {
-            // ignore cleanup errors
-          }
-        }
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Gift card purchase failed: ${(err as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---- List available products ----
+  server.tool(
+    "usebitcoin_list_products",
+    "List all gift card products available on UseBitcoin.jp with valid JPY amounts.",
+    {},
+    async () => {
+      const products = Object.entries(PRODUCT_CATALOG).map(([key, cat]) => ({
+        product: key,
+        name: cat.name,
+        description: cat.description,
+        amounts: cat.amounts,
+      }));
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(products, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  // ---- Legacy V-Preca tool (backward compatible) ----
+  const VPRECA_AMOUNTS = PRODUCT_CATALOG.vpreca.amounts;
+  server.tool(
+    "usebitcoin_buy_vpreca",
+    "Buy a V-Preca gift card on UseBitcoin.jp using Lightning payment. " +
+      "Returns card number and security code. " +
+      `Valid amounts (JPY): ${VPRECA_AMOUNTS.join(", ")}`,
+    {
+      amount: z
+        .number()
+        .int()
+        .refine((v) => VPRECA_AMOUNTS.includes(v), {
+          message: `Amount must be one of: ${VPRECA_AMOUNTS.join(", ")}`,
+        })
+        .describe(`V-Preca amount in JPY. Valid: ${VPRECA_AMOUNTS.join(", ")}`),
+    },
+    async ({ amount }) => {
+      try {
+        const result = await buyGiftCard("vpreca", amount);
+        // Legacy response format
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  voucherCode: result.code,
+                  cardLast4: result.secondaryCode ?? "",
+                  amount: result.amount,
+                  expiryDate: result.expiryDate ?? "not provided",
+                  orderId: result.orderId,
+                  paymentPreimage: result.preimage,
+                  // deprecated fields for backward compat
+                  cardNumber: result.code,
+                  securityCode: result.secondaryCode ?? "",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
         return {
           content: [
             {
@@ -213,65 +377,72 @@ async function extractLightningInvoiceFromPage(
 }
 
 /**
- * Extract V-Preca voucher code and card last-4 from the order result page.
- *
- * UseBitcoin order page shows:
- *   コード 1/1
- *   [voucher code]  (alphanumeric, ~15 chars)
- *   [card last 4]   (4 digits)
- *
- * The two values appear as separate input/text fields after "コード".
+ * Extract gift code from the order result page.
+ * Generic version supporting all product types.
  */
-async function extractVPrecaCode(
+async function extractGiftCodeGeneric(
   page: import("playwright").Page,
-  expectedAmount: number,
-): Promise<VPrecaCode> {
-  // Wait for code content to render
+  product: UseBitcoinProduct,
+): Promise<{ code: string; secondaryCode?: string }> {
   await humanDelay(1000, 2000);
 
-  // Strategy 1: Find input fields (UseBitcoin renders codes in readonly inputs)
+  // Strategy 1: Readonly input fields (UseBitcoin renders codes in readonly inputs)
   const inputs = await page.locator("input[readonly], input[disabled]").all();
-  if (inputs.length >= 2) {
-    const voucherCode = await inputs[0].inputValue().catch(() => "");
-    const cardLast4 = await inputs[1].inputValue().catch(() => "");
-    if (voucherCode && cardLast4) {
-      return {
-        voucherCode,
-        cardLast4,
-        cardNumber: voucherCode,
-        securityCode: cardLast4,
-        amount: expectedAmount,
-      };
+  if (inputs.length >= 1) {
+    const code = await inputs[0].inputValue().catch(() => "");
+    const secondary =
+      inputs.length >= 2
+        ? await inputs[1].inputValue().catch(() => "")
+        : undefined;
+    if (code) {
+      return { code, secondaryCode: secondary || undefined };
     }
   }
 
-  // Strategy 2: Parse from body text — "コード 1/1{code}{4digits}"
+  // Strategy 2: "コード N/N" pattern in body text
   const bodyText = (await page.textContent("body")) ?? "";
-  const codeMatch = bodyText.match(/コード\s*\d+\/\d+\s*([A-Za-z0-9]{10,20})\s*(\d{4})/);
-  if (codeMatch) {
-    return {
-      voucherCode: codeMatch[1],
-      cardLast4: codeMatch[2],
-      cardNumber: codeMatch[1],
-      securityCode: codeMatch[2],
-      amount: expectedAmount,
-    };
+
+  // V-Preca pattern: "コード 1/1 {alphanumeric} {4digits}"
+  if (product === "vpreca") {
+    const match = bodyText.match(
+      /コード\s*\d+\/\d+\s*([A-Za-z0-9]{10,20})\s*(\d{4})/,
+    );
+    if (match) return { code: match[1], secondaryCode: match[2] };
   }
 
-  // Strategy 3: Look for any alphanumeric code + 4-digit pattern
-  const fallbackMatch = bodyText.match(/([A-Za-z][A-Za-z0-9]{9,19})\s*(\d{4})/);
-  if (fallbackMatch) {
-    return {
-      voucherCode: fallbackMatch[1],
-      cardLast4: fallbackMatch[2],
-      cardNumber: fallbackMatch[1],
-      securityCode: fallbackMatch[2],
-      amount: expectedAmount,
-    };
-  }
+  // Generic: "コード" followed by an alphanumeric string
+  const genericMatch = bodyText.match(
+    /コード\s*\d*\/?[\d]*\s*([A-Za-z0-9]{6,30})/,
+  );
+  if (genericMatch) return { code: genericMatch[1] };
+
+  // Strategy 3: Alphanumeric pattern fallback
+  const fallback = bodyText.match(/([A-Za-z][A-Za-z0-9]{9,29})/);
+  if (fallback) return { code: fallback[1] };
 
   throw new Error(
-    "Could not extract V-Preca voucher code from the order page. " +
+    `Could not extract gift code for ${PRODUCT_CATALOG[product]?.name ?? product} from the order page. ` +
       "The page structure may have changed.",
   );
+}
+
+// ---------------------------------------------------------------------------
+// Legacy helper (re-exported for backward compat if needed)
+// ---------------------------------------------------------------------------
+
+/**
+ * @deprecated Use buyGiftCard("vpreca", amount) instead.
+ */
+export async function extractVPrecaCode(
+  page: import("playwright").Page,
+  expectedAmount: number,
+): Promise<VPrecaCode> {
+  const result = await extractGiftCodeGeneric(page, "vpreca");
+  return {
+    voucherCode: result.code,
+    cardLast4: result.secondaryCode ?? "",
+    cardNumber: result.code,
+    securityCode: result.secondaryCode ?? "",
+    amount: expectedAmount,
+  };
 }
