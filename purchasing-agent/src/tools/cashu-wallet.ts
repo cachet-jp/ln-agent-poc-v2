@@ -14,6 +14,8 @@ import {
   receiveTokens,
   checkProofStates,
   getMintInfo,
+  createMintInvoice,
+  claimMintInvoice,
 } from "../lib/cashu-client.js";
 
 export function registerCashuTools(server: McpServer): void {
@@ -291,6 +293,135 @@ export function registerCashuTools(server: McpServer): void {
             {
               type: "text" as const,
               text: `Check failed: ${(err as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---- cashu_create_invoice ----
+  server.tool(
+    "cashu_create_invoice",
+    "Create a Lightning invoice to top up your Cashu wallet. " +
+      "Anyone can pay this invoice from any Lightning wallet (Phoenix, Wallet of Satoshi, etc). " +
+      "Returns the BOLT11 invoice, a QR code image, and a quote ID. " +
+      "After payment, call cashu_claim_invoice with the quote ID to claim the ecash.",
+    {
+      amount: z
+        .number()
+        .positive()
+        .describe("Amount in satoshis to receive"),
+    },
+    async ({ amount }) => {
+      try {
+        const result = await createMintInvoice(amount);
+        // Extract base64 from data URL for MCP image content
+        const base64 = result.qrDataUrl.replace(/^data:image\/png;base64,/, "");
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  quoteId: result.quoteId,
+                  bolt11: result.bolt11,
+                  amount: `${result.amount.toLocaleString()} sats`,
+                  expiry: new Date(result.expiry * 1000).toISOString(),
+                  message:
+                    "Pay this Lightning invoice from any wallet. " +
+                    "After payment, call cashu_claim_invoice with the quoteId to claim your ecash.",
+                },
+                null,
+                2,
+              ),
+            },
+            {
+              type: "image" as const,
+              data: base64,
+              mimeType: "image/png",
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Invoice creation failed: ${(err as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---- cashu_claim_invoice ----
+  server.tool(
+    "cashu_claim_invoice",
+    "Check if a mint invoice has been paid and claim the ecash proofs. " +
+      "Call this after paying the Lightning invoice from cashu_create_invoice. " +
+      "Can be called multiple times safely — proofs are only claimed once.",
+    {
+      quoteId: z.string().describe("The quote ID returned by cashu_create_invoice"),
+      amount: z.number().positive().describe("The amount in sats (same as cashu_create_invoice)"),
+    },
+    async ({ quoteId, amount }) => {
+      try {
+        const result = await claimMintInvoice(quoteId, amount);
+        const formatSats = (n: number) =>
+          `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
+
+        if (!result.claimed) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    success: false,
+                    quoteId: result.quoteId,
+                    state: result.state,
+                    message:
+                      result.state === "UNPAID"
+                        ? "Invoice not yet paid. Please pay the Lightning invoice and try again."
+                        : `Unexpected state: ${result.state}`,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  quoteId: result.quoteId,
+                  state: result.state,
+                  amount: formatSats(result.amount),
+                  message: "Ecash claimed and added to your Cashu wallet!",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Claim failed: ${(err as Error).message}`,
             },
           ],
           isError: true,

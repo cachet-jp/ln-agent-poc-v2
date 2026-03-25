@@ -172,6 +172,16 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 → 「残高を見たい」
 ```
 
+**Lightning でチャージ（QR コード表示）:**
+
+```
+> /cashu-manage
+→ 「5000 sats チャージしたい」
+→ （QR コードが表示される → Phoenix 等で支払い）
+→ 「支払った」
+→ （ecash が残高に追加される）
+```
+
 **Cashu トークンを受け取る:**
 
 ```
@@ -279,6 +289,8 @@ scripts/ssh-tunnel.sh
 | ツール | 説明 | モード |
 |--------|------|--------|
 | `cashu_get_balance` | ecash 残高確認 | Cashu-only / Hybrid |
+| `cashu_create_invoice` | Lightning invoice 発行（QR コード付き）で入金 | Cashu-only / Hybrid |
+| `cashu_claim_invoice` | 支払い済み invoice から ecash を受け取り | Cashu-only / Hybrid |
 | `cashu_receive_tokens` | Cashu トークン受取 | Cashu-only / Hybrid |
 | `cashu_send_tokens` | Cashu トークン送信（トークン文字列を生成） | Cashu-only / Hybrid |
 | `cashu_melt_tokens` | Lightning invoice を ecash で支払い | Cashu-only / Hybrid |
