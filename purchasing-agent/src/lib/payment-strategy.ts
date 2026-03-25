@@ -6,10 +6,15 @@
  */
 
 import { isCashuEnabled, getCashuConfig } from "./cashu-config.js";
-import { getCashuBalance, meltTokens, mintTokens } from "./cashu-client.js";
-import { payLightningInvoice, getBalance, type PaymentResult } from "./clw-client.js";
+import { getCashuBalance, meltTokens } from "./cashu-client.js";
 
 export type PaymentMethod = "ark" | "cashu" | "auto";
+
+export interface PaymentResult {
+  preimage: string;
+  amount: number;
+  txid: string;
+}
 
 export interface PayBolt11Result extends PaymentResult {
   /** Which payment method was actually used */
@@ -62,6 +67,8 @@ export async function payBolt11(
 }
 
 async function payViaArk(bolt11: string): Promise<PayBolt11Result> {
+  // Lazy import — clw-client depends on claw-cash submodule
+  const { payLightningInvoice } = await import("./clw-client.js");
   const result = await payLightningInvoice(bolt11);
   return {
     ...result,
