@@ -19,8 +19,9 @@
   "dependencies": {
     "@arkade-os/boltz-swap": "^0.2.18",
     "@arkade-os/sdk": "^0.3.12",
-    "@clw-cash/skills": "link:../claw-cash/skills",
+    "@cashu/cashu-ts": "^3.6.1",
     "@clw-cash/sdk": "link:../claw-cash/remote-signer-identity",
+    "@clw-cash/skills": "link:../claw-cash/skills",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "dotenv": "^16.4.7",
     "playwright": "^1.50.1",
