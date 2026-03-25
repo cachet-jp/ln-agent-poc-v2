@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { newPage, humanDelay } from "../lib/browser.js";
-import { payLightningInvoice } from "../lib/clw-client.js";
+import { payBolt11 } from "../lib/payment-strategy.js";
 import { getConfig } from "../lib/config.js";
 import type { VPrecaCode } from "../types.js";
 
@@ -93,7 +93,7 @@ export function registerUseBitcoinTools(server: McpServer): void {
         }
 
         // 6. Pay the Lightning invoice via Ark wallet
-        const payResult = await payLightningInvoice(bolt11);
+        const payResult = await payBolt11(bolt11);
         if (!payResult.preimage) {
           throw new Error("Lightning payment failed — no preimage received");
         }
