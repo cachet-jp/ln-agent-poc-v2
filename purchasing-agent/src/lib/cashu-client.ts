@@ -25,7 +25,12 @@ import {
   removeProofs,
   getTotalBalance,
 } from "./cashu-store.js";
-import { payLightningInvoice } from "./clw-client.js";
+// Lazy import — clw-client depends on claw-cash submodule which may not be available.
+// Only mintTokens() needs it (to pay the mint's Lightning invoice via Ark).
+async function getPayLightningInvoice() {
+  const { payLightningInvoice } = await import("./clw-client.js");
+  return payLightningInvoice;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -150,6 +155,7 @@ export async function mintTokens(amountSats: number): Promise<MintResult> {
   const mintQuote = await wallet.createMintQuoteBolt11(amountSats);
 
   // 2. Pay the Lightning invoice via Ark wallet
+  const payLightningInvoice = await getPayLightningInvoice();
   const payResult = await payLightningInvoice(mintQuote.request);
   if (!payResult.preimage) {
     throw new Error("Failed to pay mint's Lightning invoice via Ark wallet");
@@ -332,5 +338,16 @@ export async function checkProofStates(): Promise<ProofStateResult[]> {
 export async function getMintInfo(): Promise<Record<string, unknown>> {
   const wallet = await getCashuWallet();
   const info = wallet.getMintInfo();
-  return info as unknown as Record<string, unknown>;
+  // MintInfo wraps the raw data in _mintInfo
+  const raw = (info as any)._mintInfo ?? info;
+  return {
+    name: raw.name,
+    version: raw.version,
+    description: raw.description,
+    description_long: raw.description_long,
+    contact: raw.contact,
+    motd: raw.motd,
+    nuts: raw.nuts,
+    mintUrl: getMintUrl(),
+  };
 }
