@@ -42,6 +42,13 @@ const configSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
 
+  // Bitrefill
+  // BITREFILL_API_KEY: single API key for CLI (primary, from bitrefill.com/account/developers)
+  // BITREFILL_API_ID / BITREFILL_API_SECRET: used by official bitrefill-mcp-server (backward compat)
+  BITREFILL_API_KEY: optStr,
+  BITREFILL_API_ID: optStr,
+  BITREFILL_API_SECRET: optStr,
+
   // Guardrails
   MAX_SPEND_JPY: z.coerce.number().positive().default(5000),
 
