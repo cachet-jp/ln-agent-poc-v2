@@ -100,12 +100,12 @@ Cashu 残高: XX,XXX sats
 ### カスタム purchasing-agent ツール（Cashu/Ark 支払い対応）
 - `bitrefill_search` — 商品検索
 - `bitrefill_product_detail` — 商品詳細
+- `bitrefill_categories` — カテゴリ一覧
 - `bitrefill_buy` — 購入実行（Lightning 支払い → コード取得）
 - `bitrefill_order_status` — 注文状況確認
 - `bitrefill_account_balance` — Bitrefill アカウント残高
-- `bitrefill_categories` — カテゴリ一覧
 
-### 公式 Bitrefill MCP サーバーツール（別途利用可能）
+### 公式 Bitrefill MCP サーバーツール（.mcp.json で追加時）
 - `search` — 商品検索（公式版）
 - `detail` — 商品詳細（公式版）
 - `categories` — カテゴリ（公式版）
@@ -113,14 +113,19 @@ Cashu 残高: XX,XXX sats
 - `pay_invoice` — Bitrefill 残高で支払い
 - `get_orders` / `unseal_order` — 注文管理
 
-※ 公式ツールは Bitrefill アカウント残高での支払い、カスタムツールは Cashu/Ark での Lightning 支払いに対応
+> **使い分け**: カスタムツール = Cashu/Ark の BTC で Lightning 支払い、公式ツール = Bitrefill アカウント残高で支払い
 
 ## Prerequisites
 
-purchasing-agent MCP サーバーが接続済みであること。
-Bitrefill API キーが必要な機能（購入）を使う場合は `.env` に以下を設定:
+1. **purchasing-agent MCP サーバー**が接続済みであること
+2. **@bitrefill/cli** がインストール済み: `npm install -g @bitrefill/cli`
+3. **API キー**を `.env` に設定:
 
-```
-BITREFILL_API_ID=your_api_id
-BITREFILL_API_SECRET=your_api_secret
+```bash
+# 推奨: 単一キー（bitrefill.com/account/developers で取得）
+BITREFILL_API_KEY=your_api_key
+
+# 公式 MCP サーバーを使う場合（.mcp.json 内で設定）
+# BITREFILL_API_ID=your_api_key
+# BITREFILL_API_SECRET=your_api_key
 ```

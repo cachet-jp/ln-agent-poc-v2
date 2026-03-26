@@ -24,13 +24,21 @@ const execFileAsync = promisify(execFile);
 
 function getApiKey(): string {
   const config = getConfig();
-  const apiKey = config.BITREFILL_API_ID || config.BITREFILL_API_SECRET;
+  // Priority: BITREFILL_API_KEY > BITREFILL_API_ID > BITREFILL_API_SECRET
+  const apiKey = config.BITREFILL_API_KEY || config.BITREFILL_API_ID || config.BITREFILL_API_SECRET;
   if (!apiKey) {
     throw new Error(
-      "Bitrefill API key not configured. Set BITREFILL_API_ID in .env.",
+      "Bitrefill API key not configured. Set BITREFILL_API_KEY in .env " +
+      "(get one at https://www.bitrefill.com/account/developers).",
     );
   }
   return apiKey;
+}
+
+/** Check if Bitrefill credentials are available. */
+export function hasBitrefillCredentials(): boolean {
+  const config = getConfig();
+  return !!(config.BITREFILL_API_KEY || config.BITREFILL_API_ID || config.BITREFILL_API_SECRET);
 }
 
 /**
@@ -67,6 +75,7 @@ function parseCliOutput(output: string): any {
 export interface SearchOptions {
   country?: string;
   category?: string;
+  limit?: number;
 }
 
 /**
