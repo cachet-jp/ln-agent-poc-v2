@@ -87,3 +87,103 @@ export interface AmazonPurchaseResult {
   itemName: string;
   totalAmount: string;
 }
+
+// ---------------------------------------------------------------------------
+// Bitrefill types
+// ---------------------------------------------------------------------------
+
+/** Bitrefill product from search results */
+export interface BitrefillProduct {
+  /** Product identifier */
+  id: string;
+  /** Display name */
+  name: string;
+  /** ISO country code */
+  country: string;
+  /** Currency code (e.g. "JPY", "USD") */
+  currency: string;
+  /** Product category */
+  category: string;
+  /** Variable-price range (if applicable) */
+  range?: { min: number; max: number };
+  /** Fixed denomination packages */
+  packages?: { value: number; satoshiPrice: number }[];
+}
+
+/** Bitrefill product detail (extended info) */
+export interface BitrefillProductDetail extends BitrefillProduct {
+  /** Long description */
+  description?: string;
+  /** Redemption instructions */
+  redemptionInstructions?: string;
+  /** Image URL */
+  image?: string;
+}
+
+/** Bitrefill invoice returned by create_invoice */
+export interface BitrefillInvoice {
+  /** Invoice ID */
+  id: string;
+  /** Associated order ID */
+  orderId?: string;
+  /** Lightning BOLT11 invoice string */
+  lightningInvoice?: string;
+  /** Bitcoin on-chain URI */
+  bitcoinUri?: string;
+  /** Price in satoshis */
+  satoshiPrice: number;
+  /** Invoice status */
+  status: string;
+  /** Payment method */
+  paymentMethod: string;
+}
+
+/** Bitrefill order with redeemable codes */
+export interface BitrefillOrder {
+  /** Order ID */
+  id: string;
+  /** Order status */
+  status: string;
+  /** Ordered items */
+  items: BitrefillOrderItem[];
+}
+
+/** Single item in a Bitrefill order */
+export interface BitrefillOrderItem {
+  /** Product ID */
+  productId: string;
+  /** Product name */
+  productName: string;
+  /** Redemption code (after unseal) */
+  code?: string;
+  /** PIN (after unseal, if applicable) */
+  pin?: string;
+  /** Value/denomination */
+  value?: number;
+  /** Currency */
+  currency?: string;
+}
+
+/** Result from bitrefill_buy tool */
+export interface BitrefillPurchaseResult {
+  /** Provider identifier */
+  provider: "bitrefill";
+  /** Bitrefill product ID */
+  productId: string;
+  /** Product name */
+  productName: string;
+  /** Primary redemption code */
+  code: string;
+  /** PIN if applicable */
+  pin?: string;
+  /** Bitrefill order ID */
+  orderId: string;
+  /** Lightning payment preimage */
+  preimage: string;
+  /** Payment method used */
+  paymentMethod: "cashu" | "ark" | "auto";
+  /** Sats paid */
+  satsPaid: number;
+  /** Fee in sats */
+  fee?: number;
+}

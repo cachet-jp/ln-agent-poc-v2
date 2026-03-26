@@ -40,6 +40,12 @@ try {
   console.error(`[purchasing-agent] Ark tools unavailable (Cashu-only mode): ${(err as Error).message}`);
 }
 
+// Bitrefill tools — search/detail always available; purchase tools require API credentials
+{
+  const { registerBitrefillTools } = await import("./tools/bitrefill.js");
+  registerBitrefillTools(server);
+}
+
 // Amazon tools — only registered when credentials are configured (Phase 1+)
 if (config.AMAZON_EMAIL && config.AMAZON_PASSWORD) {
   try {
