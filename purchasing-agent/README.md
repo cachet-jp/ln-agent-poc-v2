@@ -2,7 +2,7 @@
 
 Bitcoin で日本のギフトカードを購入する MCP サーバー。
 
-UseBitcoin.jp 上の 6 種類のギフトカード（Kyash・V-Preca・QUO カード Pay・au PAY・DMM・BitCash）を、Cashu ecash または Ark ウォレットから Lightning 支払いで購入します。
+UseBitcoin.jp 上の 6 種類の国内ギフトカードと、Bitrefill 上の 1,500+ ブランド（180+ カ国のギフトカード・eSIM・モバイルトップアップ）を、Cashu ecash または Ark ウォレットから Lightning 支払いで購入します。
 
 ---
 
@@ -13,10 +13,11 @@ UseBitcoin.jp 上の 6 種類のギフトカード（Kyash・V-Preca・QUO カ�
 3. [セットアップ A — MCP サーバーとして使う](#セットアップ-a--mcp-サーバーとして使う)
 4. [セットアップ B — Claude Code SKILL として使う](#セットアップ-b--claude-code-skill-として使う)
 5. [セットアップ C — AWS (EC2) で使う](#セットアップ-c--aws-ec2-で使う)
-6. [MCP ツール一覧](#mcp-ツール一覧)
-7. [環境変数リファレンス](#環境変数リファレンス)
-8. [アーキテクチャ](#アーキテクチャ)
-9. [開発](#開発)
+6. [Bitrefill 連携](#bitrefill-連携)
+7. [MCP ツール一覧](#mcp-ツール一覧)
+8. [環境変数リファレンス](#環境変数リファレンス)
+9. [アーキテクチャ](#アーキテクチャ)
+10. [開発](#開発)
 
 ---
 
@@ -30,6 +31,14 @@ UseBitcoin.jp 上の 6 種類のギフトカード（Kyash・V-Preca・QUO カ�
 | au PAY ギフト | `aupay` | 1000, 3000, 5000, 10000, 50000 | au PAY 加盟店 |
 | DMM ポイント | `dmm` | 2000, 5000, 10000, 50000, 100000 | DMM.com（8%割引あり） |
 | ビットキャッシュ | `bitcash` | 1500, 3000, 5000, 10000, 50000 | オンラインゲーム・電子書籍 |
+
+### Bitrefill（世界 180+ カ国）
+
+上記に加え、Bitrefill 経由で **1,500+ ブランド**のギフトカード・eSIM・モバイルトップアップを購入可能です。
+
+例: Amazon（各国）、Google Play、Netflix、Steam、App Store、Uber、eSIM データプラン 等
+
+> Bitrefill 利用には別途 API キーが必要です。詳しくは [Bitrefill 連携](#bitrefill-連携) を参照。
 
 ---
 
@@ -162,6 +171,7 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 | `/cashu-purchase` | Cashu 経由でギフトカードを購入（対話形式） |
 | `/cashu-manage` | Cashu ウォレット管理（残高・送受信・チャージ） |
 | `/auto-purchase` | BTC でギフトカードを自動購入（ステップバイステップ） |
+| `/bitrefill-purchase` | Bitrefill でギフトカード・eSIM を購入（世界 180+ カ国） |
 
 ### B-3. 使い方の例
 
@@ -274,15 +284,161 @@ scripts/ssh-tunnel.sh
 
 ---
 
+## Bitrefill 連携
+
+Bitrefill を使うと世界中のギフトカード・eSIM・モバイルトップアップを BTC で購入できます。
+利用方法は **3 つ**あり、それぞれ認証方式が異なります。
+
+### 方式 1 — カスタム purchasing-agent（推奨）
+
+purchasing-agent に統合された `bitrefill_buy` ツールを使います。
+**Cashu ecash で Lightning 支払いを自動代行**するため、Bitrefill アカウントに残高を入れる必要がありません。
+
+#### セットアップ
+
+1. **@bitrefill/cli をインストール**（purchasing-agent が内部で呼び出します）:
+   ```bash
+   npm install -g @bitrefill/cli
+   ```
+
+2. **API キーを取得**:
+   - [bitrefill.com/account/developers](https://www.bitrefill.com/account/developers) でキーを生成
+   - Bitrefill アカウントが必要（[bitrefill.com/signup](https://www.bitrefill.com/signup)）
+
+3. **`.env` に設定**:
+   ```bash
+   BITREFILL_API_KEY=your_api_key_here
+   ```
+
+4. **purchasing-agent を再起動**すれば `bitrefill_*` ツールが有効化されます。
+
+#### 使い方
+
+```
+ツール bitrefill_search を呼んで、日本の Amazon ギフトカードを探して
+→ bitrefill_buy で ¥100 の Amazon.co.jp を購入して
+```
+
+#### 購入フロー
+
+```
+bitrefill_buy(productId, value)
+  → @bitrefill/cli buy-products --payment_method lightning
+  → Lightning invoice 取得
+  → Cashu melt（Mint が Lightning を代行）
+  → Bitrefill が支払い確認 → ギフトコード取得
+```
+
+---
+
+### 方式 2 — 公式 Bitrefill MCP サーバー
+
+Bitrefill 公式の MCP サーバー（`bitrefill-mcp-server`）を **別の MCP サーバーとして**追加します。
+検索・ブラウズに加え、**Bitrefill アカウント残高**での支払いが可能です。
+
+#### セットアップ
+
+1. **API キーを取得**（方式 1 と同じキーが使えます）
+
+2. **`.mcp.json` に追加**:
+   ```json
+   {
+     "mcpServers": {
+       "bitrefill": {
+         "command": "npx",
+         "args": ["-y", "bitrefill-mcp-server"],
+         "env": {
+           "BITREFILL_API_ID": "your_api_key_here",
+           "BITREFILL_API_SECRET": "your_api_key_here"
+         }
+       }
+     }
+   }
+   ```
+
+3. **Claude Code を再起動**すると、`search`・`detail`・`create_invoice`・`pay_invoice` 等のツールが使えるようになります。
+
+#### 公式 MCP vs カスタム purchasing-agent
+
+| | 公式 MCP サーバー | カスタム purchasing-agent |
+|---|---|---|
+| 支払い方法 | Bitrefill **アカウント残高** | **Cashu ecash / Ark** (Lightning) |
+| 事前入金 | Bitrefill アカウントに BTC/crypto を入金 | Cashu ウォレットに ecash をチャージ |
+| 購入フロー | `create_invoice` → `pay_invoice` | `bitrefill_buy`（全自動） |
+| メリット | 公式サポート、注文管理機能が豊富 | Cashu/Ark との統合、入金不要 |
+
+---
+
+### 方式 3 — Bitrefill CLI 直接利用（OAuth）
+
+`@bitrefill/cli` を直接コマンドラインから使います。API キーなしで **ブラウザ OAuth** による対話認証が可能です。
+
+#### セットアップ
+
+```bash
+npm install -g @bitrefill/cli
+
+# API キーなしで実行 → ブラウザが開いて OAuth 認証
+bitrefill search-products --query "Amazon" --country JP
+
+# トークンは自動保存される（~/.config/bitrefill-cli/api.bitrefill.com.json）
+```
+
+#### 使い方
+
+```bash
+# 商品検索
+bitrefill search-products --query "Netflix" --country US
+
+# 商品詳細
+bitrefill get-product-details --product_id "netflix-usa"
+
+# 購入（Lightning 支払い）
+bitrefill buy-products \
+  --cart_items '[{"product_id": "amazon_jp-japan", "package_id": 100}]' \
+  --payment_method lightning
+
+# 注文確認・コード取得
+bitrefill list-orders --include_redemption_info true
+```
+
+> CLI が返す Lightning invoice を Cashu で支払うには、ヘルパースクリプトを使います:
+> ```bash
+> npx tsx scripts/cashu-pay-bolt11.ts <bolt11_invoice>
+> ```
+
+#### 認証方式の比較
+
+| 方式 | 認証 | API キー | 用途 |
+|------|------|---------|------|
+| **方式 1**: purchasing-agent | `BITREFILL_API_KEY` env var | 必要 | MCP ツール + Cashu 支払い（推奨） |
+| **方式 2**: 公式 MCP サーバー | `BITREFILL_API_ID` + `API_SECRET` | 必要 | 公式ツール + アカウント残高払い |
+| **方式 3**: CLI 直接 | ブラウザ OAuth（対話） | 不要 | コマンドライン操作 |
+
+> **API キーの取得**: いずれの方式でも [bitrefill.com/account/developers](https://www.bitrefill.com/account/developers) で取得できます（方式 3 は OAuth で代替可能）。
+
+---
+
 ## MCP ツール一覧
 
-### ギフトカード購入
+### ギフトカード購入（UseBitcoin.jp）
 
 | ツール | 説明 |
 |--------|------|
 | `usebitcoin_buy_gift_card` | ギフトカード購入（product + amount を指定） |
 | `usebitcoin_list_products` | 商品カタログ一覧 |
 | `usebitcoin_buy_vpreca` | V-Preca 購入（レガシー互換） |
+
+### Bitrefill 購入（要 `BITREFILL_API_KEY`）
+
+| ツール | 説明 |
+|--------|------|
+| `bitrefill_search` | 商品検索（商品名・国・カテゴリで絞り込み） |
+| `bitrefill_product_detail` | 商品詳細（金額・パッケージ・引き換え方法） |
+| `bitrefill_categories` | カテゴリ一覧取得 |
+| `bitrefill_buy` | 購入実行（Lightning invoice → Cashu/Ark 支払い → コード取得） |
+| `bitrefill_order_status` | 注文ステータス確認 |
+| `bitrefill_account_balance` | Bitrefill アカウント残高確認 |
 
 ### Cashu ウォレット
 
@@ -331,6 +487,14 @@ scripts/ssh-tunnel.sh
 | `CLW_PUBLIC_KEY` | — | — | 33-byte 圧縮公開鍵 hex |
 | `CLW_ARK_SERVER_URL` | — | — | Ark サーバー URL |
 
+### Bitrefill（Bitrefill 購入で必要）
+
+| 変数 | 必須 | デフォルト | 説明 |
+|------|:----:|-----------|------|
+| `BITREFILL_API_KEY` | — | — | Bitrefill API キー（[取得](https://www.bitrefill.com/account/developers)） |
+| `BITREFILL_API_ID` | — | — | 公式 MCP サーバー用 ID（`API_KEY` と同じ値でOK） |
+| `BITREFILL_API_SECRET` | — | — | 公式 MCP サーバー用 SECRET（`API_KEY` と同じ値でOK） |
+
 ### 共通
 
 | 変数 | 必須 | デフォルト | 説明 |
@@ -345,11 +509,14 @@ scripts/ssh-tunnel.sh
 ### 支払いフロー
 
 ```
-[Cashu-only]
+[UseBitcoin — Cashu-only]
   Cashu ecash → melt → Cashu Mint が Lightning 代行 → UseBitcoin → ギフトコード
 
-[Hybrid]
+[UseBitcoin — Hybrid]
   BTC (onchain) → Ark vTXO → Cashu チャージ → melt → Mint が Lightning 代行 → UseBitcoin → ギフトコード
+
+[Bitrefill — Cashu + CLI]
+  Cashu ecash → melt → Mint が Lightning 代行 → Bitrefill CLI → ギフトコード/eSIM
 ```
 
 ### システム構成
@@ -369,12 +536,15 @@ scripts/ssh-tunnel.sh
 │  Ark Wallet ────────────┘  (optional)                │
 │  (clw-client.ts)                                     │
 │                                                      │
+│  Bitrefill Client ──── @bitrefill/cli                │
+│  (bitrefill-client.ts)  (MCP API wrapper)            │
+│                                                      │
 │  Playwright  (headless Chrome for UseBitcoin.jp)     │
-└──────────┬───────────────────────┬───────────────────┘
-           │                       │
-           ▼                       ▼
-     Cashu Mint              UseBitcoin.jp
-     (Lightning 代行)        (ギフトカード販売)
+└──────┬──────────────┬──────────────┬─────────────────┘
+       │              │              │
+       ▼              ▼              ▼
+  Cashu Mint     UseBitcoin.jp    Bitrefill
+  (Lightning 代行) (国内ギフト)   (世界 1500+ ブランド)
 ```
 
 ### 技術スタック
