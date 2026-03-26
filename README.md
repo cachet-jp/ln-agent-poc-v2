@@ -1,220 +1,164 @@
-# LN Agent PoC — Mainnet LND × OpenClaw
+# LN Agent PoC
 
-Bitcoin Lightning Network ノード管理エージェント PoC 環境。
-AWS 上に LND + Bitcoin Core + OpenClaw を構築し、AI エージェント経由で LN チャネルを管理する。
+Bitcoin Lightning Network ノード管理 + AI 購入エージェントの PoC 環境。
 
-*AWS を使わない購入エージェントの使い方は[こちら](https://github.com/cachet-jp/ln-agent-poc/blob/main/purchasing-agent/README.md)
-
-## ディレクトリ構成
-
-```
-ln-agent-poc/
-├── terraform/               # AWS インフラ (IaC)
-│   ├── main.tf              # Provider / backend
-│   ├── variables.tf         # 変数定義
-│   ├── vpc.tf               # VPC / Subnet
-│   ├── security.tf          # SG / IAM
-│   ├── compute.tf           # EC2 / EIP
-│   ├── storage.tf           # S3 / Secrets Manager
-│   ├── monitoring.tf        # CloudWatch / SNS
-│   ├── outputs.tf           # 出力値
-│   ├── userdata.sh          # EC2 bootstrap
-│   └── terraform.tfvars.example
-├── purchasing-agent/        # Phase 1: AI 購入エージェント (MCP ツール)
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   └── src/
-│       ├── server.ts        # MCP サーバー (stdio transport)
-│       ├── types.ts         # 共通型定義
-│       ├── tools/
-│       │   ├── ark-wallet.ts    # Ark ウォレット操作
-│       │   ├── usebitcoin.ts    # V-Preca 購入 (Lightning 支払い)
-│       │   └── amazon.ts       # Amazon 購入
-│       └── lib/
-│           ├── clw-client.ts    # clw.cash SDK ラッパー
-│           ├── browser.ts       # Playwright ヘルパー
-│           └── config.ts        # 設定管理 (zod validation)
-├── docker/                  # コンテナ設定
-│   ├── docker-compose.yml
-│   ├── bitcoin.conf         # Bitcoin Core Mainnet
-│   ├── lnd.conf             # LND Mainnet
-│   ├── .env.example         # 環境変数テンプレート
-│   └── openclaw-config/
-│       ├── agent.yaml           # LN チャネル管理エージェント
-│       └── agent-purchasing.yaml # 購入エージェント設定
-└── scripts/                 # セットアップスクリプト
-    ├── 00-deploy-infra.sh       # Step 1: AWS インフラ構築
-    ├── 01-setup-node.sh         # Step 2: Bitcoin Core + LND 起動
-    ├── 02-setup-openclaw.sh     # Step 3: OpenClaw 接続
-    └── 03-verify-stack.sh       # ヘルスチェック
-```
-
-## Phase 1: AI 購入エージェント
-
-BTC で V-Preca ギフトカードを自動購入する AI エージェント。
-**Ark Protocol (Bitcoin L2) → Lightning Network → UseBitcoin.jp → V-Preca** の E2E フローを実現。
-
-### E2E 購入フロー（実証済み）
-
-```
-BTC (onchain)
-  │  boarding address に送金
-  ▼
-Ark Protocol (offchain vTXO)
-  │  Wallet.settle() で onboard
-  ▼
-Ark Wallet (offchain balance)
-  │  payLightningInvoice() → Boltz reverse swap
-  ▼
-Lightning Network
-  │  BOLT11 invoice 支払い
-  ▼
-UseBitcoin.jp
-  │  V-Preca ギフトカード発行
-  ▼
-V-Preca (バウチャーコード + カード下4桁)
-```
-
-### セットアップ
-
-```bash
-cd purchasing-agent
-pnpm install
-cp .env.example .env
-# .env にクレデンシャルを記入
-
-# 開発
-pnpm dev
-
-# ビルド
-pnpm build && pnpm start
-```
-
-### MCP ツール一覧
-
-| ツール | 説明 | 状態 |
-|---|---|---|
-| `ark_get_balance` | Ark ウォレット残高取得 (offchain + onchain) | ✅ |
-| `ark_get_address` | 入金用アドレス取得 (arkAddress / boardingAddress) | ✅ |
-| `ark_create_invoice` | Lightning invoice 作成 (Boltz reverse swap) | ✅ |
-| `ark_pay_invoice` | Lightning invoice 支払い (Boltz submarine swap) | ✅ |
-| `usebitcoin_buy_vpreca` | V-Preca 購入 (Lightning 支払い、500〜100,000 JPY) | ✅ |
-
-### テストスクリプト
-
-```bash
-# 残高確認
-npx tsx scripts/check-new-identity.ts
-
-# オンチェーン → offchain vTXO 変換
-npx tsx scripts/test-onboard.ts
-
-# V-Preca 購入テスト (500 JPY)
-npx tsx scripts/test-buy-vpreca.ts
-
-# Boltz API 診断
-npx tsx scripts/diagnose-boltz.ts
-```
-
-### 前提条件 (手動セットアップ)
-
-1. clw.cash アカウント作成 → `CLW_SESSION_TOKEN` 等を `.env` に設定
-2. Ark ウォレットに BTC を入金 (`ark_get_address` で取得した boarding address へ送金)
-3. onboard 実行で boarding UTXO を offchain vTXO に変換
-4. `tiero/claw-cash` を `cachet-jp` org に fork → git submodule として追加
+AWS 上に LND + Bitcoin Core + OpenClaw を構築し、AI エージェント経由で Lightning チャネルの管理と BTC による商品購入を実現します。
 
 ---
 
-## デプロイ手順
+## リポジトリ構成
+
+```
+ln-agent-poc/
+├── terraform/               # AWS インフラ (Terraform IaC)
+├── docker/                  # Bitcoin Core + LND + OpenClaw (Docker Compose)
+├── scripts/                 # デプロイ・セットアップスクリプト
+├── purchasing-agent/        # AI 購入エージェント (MCP サーバー)
+│                            #   → 詳細は purchasing-agent/README.md
+├── mcp/                     # MCP 設定テンプレート
+└── .claude/commands/        # Claude Code SKILL ファイル
+```
+
+### 主要コンポーネント
+
+| コンポーネント | 説明 |
+|--------------|------|
+| **[purchasing-agent](./purchasing-agent/)** | BTC でギフトカード・eSIM を購入する MCP サーバー。Cashu/Ark ウォレット + Bitrefill/UseBitcoin 対応 |
+| **terraform/** | AWS インフラ定義（VPC・EC2・EBS・IAM・S3・CloudWatch） |
+| **docker/** | Bitcoin Core v27 + LND v0.18 + OpenClaw のコンテナ構成 |
+| **scripts/** | EC2 セットアップ自動化スクリプト |
+
+> **購入機能の詳細**（セットアップ・MCP ツール・SKILL・Bitrefill 連携）は **[purchasing-agent/README.md](./purchasing-agent/README.md)** を参照してください。
+
+---
+
+## アーキテクチャ
+
+```
+Local Machine                      AWS (ap-northeast-1)
+┌──────────────────┐              ┌─────────────────────────────────────────┐
+│ Claude Desktop   │◄─────────────│  EC2 t3.large (Ubuntu 22.04)            │
+│ / Claude Code    │   gRPC/REST  │  ┌─────────────────────────────────┐    │
+│ + MCP Client     │              │  │ Docker Compose                   │    │
+└──────────────────┘              │  │ ┌───────────┐  ┌───────────────┐│    │
+                                  │  │ │ Bitcoin   │  │ LND           ││    │
+                                  │  │ │ Core v27  │◄─│ v0.18         ││    │
+                                  │  │ │ (txindex) │  │ (mainnet)     ││    │
+                                  │  │ └───────────┘  └───────┬───────┘│    │
+                                  │  │                        │        │    │
+                                  │  │               ┌────────▼───────┐│    │
+                                  │  │               │ OpenClaw Agent ││    │
+                                  │  │               │ (LN MCP tools) ││    │
+                                  │  │               └────────────────┘│    │
+                                  │  └─────────────────────────────────┘    │
+                                  │  750GB gp3 EBS (encrypted)              │
+                                  └─────────────────────────────────────────┘
+```
+
+**データフロー**: Claude Desktop → OpenClaw MCP → LND gRPC → Bitcoin Core RPC
+
+---
+
+## AWS デプロイ手順
 
 ### 前提条件
 
 - AWS SandboxUser アクセス (cachet-jp.awsapps.com)
 - Terraform >= 1.5.0
-- AWS CLI v2 (SSO 設定済み)
-- Anthropic API Key
+- AWS CLI v2（SSO 設定済み）
+- SSH キーペア (`~/.ssh/ln-agent-poc`)
 
-### Step 1: AWS インフラ構築 (ローカルPC)
+### Step 1: AWS インフラ構築（ローカル PC）
 
 ```bash
-# tfvars を作成
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
 # terraform.tfvars を編集（API キー、オフィス IP など）
 
-# デプロイ
-cd ../scripts
-chmod +x *.sh
-./00-deploy-infra.sh
-# plan 確認後:
-cd ../terraform && terraform apply tfplan
+terraform init && terraform plan -out=tfplan && terraform apply tfplan
 ```
 
 ### Step 2: EC2 にファイル転送 & ノードセットアップ
 
 ```bash
-# terraform output から IP を取得
-PUBLIC_IP=$(terraform output -raw public_ip)
+PUBLIC_IP=$(cd terraform && terraform output -raw public_ip)
 
-# docker/ ディレクトリを EC2 へ転送
-scp -i ~/.ssh/ln-agent-poc -r ../docker/* ubuntu@${PUBLIC_IP}:~/ln-agent/
-scp -i ~/.ssh/ln-agent-poc ../scripts/0*.sh ubuntu@${PUBLIC_IP}:~/ln-agent/
+# docker/ と scripts/ を EC2 へ転送
+scp -i ~/.ssh/ln-agent-poc -r docker/* ubuntu@${PUBLIC_IP}:~/ln-agent/
+scp -i ~/.ssh/ln-agent-poc scripts/0*.sh ubuntu@${PUBLIC_IP}:~/ln-agent/
 
-# SSH 接続
+# SSH 接続してセットアップ
 ssh -i ~/.ssh/ln-agent-poc ubuntu@${PUBLIC_IP}
-
-# EC2 上で実行
-cd ~/ln-agent
-chmod +x *.sh
+cd ~/ln-agent && chmod +x *.sh
 ./01-setup-node.sh <agent-name>
 ```
 
-**注意**: Bitcoin Core の IBD（Initial Block Download）に 1〜3 日かかります。
+> **注意**: Bitcoin Core の IBD（Initial Block Download）に **1〜3 日**かかります。
 
 ### Step 3: OpenClaw セットアップ
 
 IBD 完了を待たずに実行可能（ただし LND wallet 作成は必要）:
 
 ```bash
-# EC2 上
+# EC2 上で
 cd ~/ln-agent
 ./02-setup-openclaw.sh
 ```
 
-### ヘルスチェック
+### Step 4: ヘルスチェック
 
 ```bash
 ./03-verify-stack.sh
 ```
 
-## 安全制限 (Mainnet)
+---
+
+## AWS リソース概要
+
+| リソース | スペック |
+|---------|--------|
+| EC2 | t3.large (2vCPU, 8GB RAM) |
+| EBS | gp3 750GB（暗号化） |
+| リージョン | ap-northeast-1 |
+| 推定月額コスト | ~$127/ノード |
+
+---
+
+## Mainnet 安全制限
+
+OpenClaw agent.yaml で設定:
 
 | パラメータ | 値 |
-|---|---|
+|-----------|-----|
 | 単一支払上限 | 50,000 sats |
 | 日次支出上限 | 200,000 sats |
 | チャネルサイズ上限 | 1,000,000 sats |
 | 1日あたりチャネル開設上限 | 2 |
 | force-close | 人間の承認が必要 |
 
-## AWS リソース概要
+---
 
-| リソース | スペック |
-|---|---|
-| EC2 | t3.large (2vCPU, 8GB RAM) |
-| EBS | gp3 750GB (暗号化) |
-| リージョン | ap-northeast-1 |
-| 推定月額コスト | ~$127/ノード |
+## EC2 上の便利コマンド
 
-## 便利コマンド
+### Bitcoin Core
 
 ```bash
-# Bitcoin Core 同期状況
-docker exec bitcoind-mainnet bitcoin-cli -rpcuser=bitcoinrpc -rpcpassword='<pass>' getblockchaininfo
+# 同期状況
+docker exec bitcoind-mainnet bitcoin-cli \
+  -rpcuser=bitcoinrpc -rpcpassword='<pass>' getblockchaininfo
 
-# LND 状態確認
+# ブロック高確認
+docker exec bitcoind-mainnet bitcoin-cli \
+  -rpcuser=bitcoinrpc -rpcpassword='<pass>' getblockcount
+```
+
+### LND
+
+```bash
+# ノード情報
 docker exec lnd-mainnet lncli getinfo
+
+# ウォレット残高
 docker exec lnd-mainnet lncli walletbalance
 docker exec lnd-mainnet lncli channelbalance
 
@@ -223,9 +167,31 @@ docker exec lnd-mainnet lncli newaddress p2tr
 
 # チャネル一覧
 docker exec lnd-mainnet lncli listchannels
-
-# ログ確認
-docker logs -f openclaw-agent
-docker logs -f lnd-mainnet
-docker logs -f bitcoind-mainnet
 ```
+
+### ログ
+
+```bash
+docker logs -f bitcoind-mainnet
+docker logs -f lnd-mainnet
+docker logs -f openclaw-agent
+```
+
+---
+
+## EC2 上で purchasing-agent を動かす場合
+
+purchasing-agent は EC2 上でも動作します。SSH トンネル経由でローカルの Claude Desktop/Code から接続できます。
+
+```bash
+# EC2 上で purchasing-agent を起動
+cd ~/ln-agent/purchasing-agent
+pnpm install && cp .env.example .env
+# .env を編集
+pnpm dev
+
+# ローカルから SSH トンネル
+scripts/ssh-tunnel.sh
+```
+
+セットアップ詳細・MCP ツール・SKILL については **[purchasing-agent/README.md](./purchasing-agent/README.md)** を参照してください。
