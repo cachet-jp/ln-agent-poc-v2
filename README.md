@@ -3,6 +3,8 @@
 Bitcoin Lightning Network ノード管理エージェント PoC 環境。
 AWS 上に LND + Bitcoin Core + OpenClaw を構築し、AI エージェント経由で LN チャネルを管理する。
 
+AWS を使わない購入エージェントの使い方は[こちら](https://github.com/cachet-jp/ln-agent-poc/blob/main/purchasing-agent/README.md)
+
 ## ディレクトリ構成
 
 ```
