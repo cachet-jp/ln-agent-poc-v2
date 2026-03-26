@@ -1,8 +1,11 @@
 # Purchasing Agent
 
-Bitcoin で日本のギフトカードを購入する MCP サーバー。
+Bitcoin でギフトカード・eSIM・モバイルトップアップを購入する MCP サーバー。
 
-UseBitcoin.jp 上の 6 種類の国内ギフトカードと、Bitrefill 上の 1,500+ ブランド（180+ カ国のギフトカード・eSIM・モバイルトップアップ）を、Cashu ecash または Ark ウォレットから Lightning 支払いで購入します。
+- **UseBitcoin.jp**: 国内 6 種類のギフトカード（Kyash・V-Preca・QUO カード Pay・au PAY・DMM・BitCash）
+- **Bitrefill**: 世界 180+ カ国、1,500+ ブランドのギフトカード・eSIM・モバイルトップアップ
+
+Cashu ecash または Ark ウォレットから Lightning 支払いで購入します。
 
 ---
 
@@ -12,16 +15,17 @@ UseBitcoin.jp 上の 6 種類の国内ギフトカードと、Bitrefill 上の 1
 2. [動作モード](#動作モード)
 3. [セットアップ A — MCP サーバーとして使う](#セットアップ-a--mcp-サーバーとして使う)
 4. [セットアップ B — Claude Code SKILL として使う](#セットアップ-b--claude-code-skill-として使う)
-5. [セットアップ C — AWS (EC2) で使う](#セットアップ-c--aws-ec2-で使う)
-6. [Bitrefill 連携](#bitrefill-連携)
-7. [MCP ツール一覧](#mcp-ツール一覧)
-8. [環境変数リファレンス](#環境変数リファレンス)
-9. [アーキテクチャ](#アーキテクチャ)
-10. [開発](#開発)
+5. [Bitrefill 連携](#bitrefill-連携)
+6. [MCP ツール一覧](#mcp-ツール一覧)
+7. [環境変数リファレンス](#環境変数リファレンス)
+8. [アーキテクチャ](#アーキテクチャ)
+9. [開発](#開発)
 
 ---
 
 ## 対応商品
+
+### UseBitcoin.jp（国内ギフトカード）
 
 | 商品 | `product` | 金額 (JPY) | 用途 |
 |------|-----------|-----------|------|
@@ -34,7 +38,7 @@ UseBitcoin.jp 上の 6 種類の国内ギフトカードと、Bitrefill 上の 1
 
 ### Bitrefill（世界 180+ カ国）
 
-上記に加え、Bitrefill 経由で **1,500+ ブランド**のギフトカード・eSIM・モバイルトップアップを購入可能です。
+Bitrefill 経由で **1,500+ ブランド**のデジタル商品を購入可能です。
 
 例: Amazon（各国）、Google Play、Netflix、Steam、App Store、Uber、eSIM データプラン 等
 
@@ -44,19 +48,19 @@ UseBitcoin.jp 上の 6 種類の国内ギフトカードと、Bitrefill 上の 1
 
 ## 動作モード
 
-本ツールには 2 つの動作モードがあります。用途に応じて選んでください。
-
 ### Cashu-only モード（推奨・かんたん）
 
 Cashu ecash トークンだけで動作します。Ark ウォレットや Lightning ノードは不要です。
 
 ```
-Cashu トークン受取 → melt（Mint が Lightning を代行） → UseBitcoin → ギフトコード
+Cashu トークン受取 → melt（Mint が Lightning を代行） → UseBitcoin / Bitrefill → ギフトコード
 ```
 
 **必要な設定**: `CASHU_MINT_URL` + `CASHU_STORE_KEY` のみ
 
-**入金方法**: 他のユーザーや Cashu ウォレットから `cashuB...` トークン文字列を受け取る
+**入金方法**:
+- 他のユーザーや Cashu ウォレットから `cashuB...` トークン文字列を受け取る
+- Lightning ウォレット（Phoenix, WoS 等）から `cashu_create_invoice` で直接チャージ
 
 **向いている人**: すぐ試したい・Lightning ノードを持っていない・非エンジニア
 
@@ -65,7 +69,7 @@ Cashu トークン受取 → melt（Mint が Lightning を代行） → UseBitco
 Ark Protocol (Bitcoin L2) ウォレットをバックエンドに持ち、Cashu 残高が不足したら自動で Ark から補充します。
 
 ```
-BTC (onchain) → Ark (offchain vTXO) → Cashu チャージ → melt → UseBitcoin → ギフトコード
+BTC (onchain) → Ark (offchain vTXO) → Cashu チャージ → melt → UseBitcoin / Bitrefill → ギフトコード
 ```
 
 **追加で必要な設定**: `CLW_SESSION_TOKEN`, `CLW_IDENTITY_ID`, `CLW_PUBLIC_KEY`, `CLW_ARK_SERVER_URL`
@@ -86,7 +90,7 @@ Claude Desktop や Claude Code から MCP ツールとして直接呼び出す�
 git clone https://github.com/cachet-jp/ln-agent-poc.git
 cd ln-agent-poc/purchasing-agent
 pnpm install
-npx playwright install chromium   # 初回のみ
+npx playwright install chromium   # 初回のみ（UseBitcoin 購入で必要）
 ```
 
 ### A-2. 環境変数
@@ -169,20 +173,13 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 | コマンド | 説明 |
 |---------|------|
 | `/cashu-purchase` | Cashu 経由でギフトカードを購入（対話形式） |
-| `/cashu-manage` | Cashu ウォレット管理（残高・送受信・チャージ） |
+| `/cashu-manage` | Cashu ウォレット管理（残高・送受信・Lightning チャージ） |
 | `/auto-purchase` | BTC でギフトカードを自動購入（ステップバイステップ） |
 | `/bitrefill-purchase` | Bitrefill でギフトカード・eSIM を購入（世界 180+ カ国） |
 
 ### B-3. 使い方の例
 
-**残高確認:**
-
-```
-> /cashu-manage
-→ 「残高を見たい」
-```
-
-**Lightning でチャージ（QR コード表示）:**
+**Cashu チャージ（Lightning QR コード表示）:**
 
 ```
 > /cashu-manage
@@ -192,14 +189,6 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 → （ecash が残高に追加される）
 ```
 
-**Cashu トークンを受け取る:**
-
-```
-> /cashu-manage
-→ 「受け取りたい」
-→ cashuBo2F...（トークン文字列を貼る）
-```
-
 **Kyash 1000 円を購入:**
 
 ```
@@ -207,16 +196,16 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 → 「Kyash 1000円」
 ```
 
-**V-Preca 3000 円を購入:**
+**Bitrefill で Amazon ギフトカードを購入:**
 
 ```
-> /cashu-purchase
-→ 「V-Preca 3000円」
+> /bitrefill-purchase
+→ 「Amazon Japan の ¥100 ギフトカード」
 ```
 
-### B-4. 別プロジェクトから SKILL だけ使う (A のステップが全て完了している必要があります)
+### B-4. 別プロジェクトから SKILL だけ使う
 
-自分のプロジェクトに SKILL ファイルだけコピーして使うこともできます:
+自分のプロジェクトに SKILL ファイルだけコピーして使うこともできます（A のステップが全て完了している必要があります）:
 
 ```bash
 # SKILL ファイルをコピー
@@ -225,61 +214,6 @@ cp -r ln-agent-poc/.claude/commands/ your-project/.claude/commands/
 # MCP サーバーはグローバル設定で登録
 claude mcp add --scope user purchasing-agent -- \
   npx tsx /path/to/ln-agent-poc/purchasing-agent/src/server.ts
-```
-
----
-
-## セットアップ C — AWS (EC2) で使う
-
-EC2 上で purchasing-agent を常時稼働させ、リモートから Claude 経由で操作する構成です。
-
-### C-1. インフラ構築
-
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars を編集
-
-terraform init && terraform plan -out=tfplan && terraform apply tfplan
-```
-
-### C-2. EC2 セットアップ
-
-```bash
-PUBLIC_IP=$(cd terraform && terraform output -raw public_ip)
-
-# ファイル転送
-scp -i ~/.ssh/ln-agent-poc -r docker/* ubuntu@${PUBLIC_IP}:~/ln-agent/
-scp -i ~/.ssh/ln-agent-poc scripts/0*.sh ubuntu@${PUBLIC_IP}:~/ln-agent/
-
-# SSH で接続してセットアップ
-ssh -i ~/.ssh/ln-agent-poc ubuntu@${PUBLIC_IP}
-cd ~/ln-agent && chmod +x *.sh
-./01-setup-node.sh <agent-name>
-```
-
-> Bitcoin Core の IBD（初期同期）に 1〜3 日かかります。
-
-### C-3. purchasing-agent を EC2 上で起動
-
-```bash
-# EC2 上で
-cd ~/ln-agent/purchasing-agent
-pnpm install
-cp .env.example .env
-# .env を編集
-
-# systemd 等でデーモン化するか、screen/tmux で起動
-pnpm dev
-```
-
-### C-4. ローカルから SSH トンネル経由で接続
-
-```bash
-# SSH トンネル
-scripts/ssh-tunnel.sh
-
-# Claude Desktop の MCP 設定でリモートの purchasing-agent に接続
 ```
 
 ---
@@ -407,7 +341,9 @@ bitrefill list-orders --include_redemption_info true
 > npx tsx scripts/cashu-pay-bolt11.ts <bolt11_invoice>
 > ```
 
-#### 認証方式の比較
+---
+
+### 認証方式の比較
 
 | 方式 | 認証 | API キー | 用途 |
 |------|------|---------|------|
@@ -492,8 +428,8 @@ bitrefill list-orders --include_redemption_info true
 | 変数 | 必須 | デフォルト | 説明 |
 |------|:----:|-----------|------|
 | `BITREFILL_API_KEY` | — | — | Bitrefill API キー（[取得](https://www.bitrefill.com/account/developers)） |
-| `BITREFILL_API_ID` | — | — | 公式 MCP サーバー用 ID（`API_KEY` と同じ値でOK） |
-| `BITREFILL_API_SECRET` | — | — | 公式 MCP サーバー用 SECRET（`API_KEY` と同じ値でOK） |
+| `BITREFILL_API_ID` | — | — | 公式 MCP サーバー用 ID（`API_KEY` と同じ値で OK） |
+| `BITREFILL_API_SECRET` | — | — | 公式 MCP サーバー用 SECRET（`API_KEY` と同じ値で OK） |
 
 ### 共通
 
@@ -524,7 +460,8 @@ bitrefill list-orders --include_redemption_info true
 ```
 ┌──────────────────────────────────────────────────────┐
 │ Claude Desktop / Code  (MCP Client)                  │
-│  /cashu-purchase → usebitcoin_buy_gift_card(kyash,…) │
+│  /cashu-purchase    → usebitcoin_buy_gift_card(…)    │
+│  /bitrefill-purchase → bitrefill_buy(…)              │
 └────────────────────┬─────────────────────────────────┘
                      │ stdio
 ┌────────────────────▼─────────────────────────────────┐
@@ -554,6 +491,7 @@ bitrefill list-orders --include_redemption_info true
 | MCP | `@modelcontextprotocol/sdk` — stdio transport |
 | Cashu | `@cashu/cashu-ts` — NUT-04/05/06/07/11/12 |
 | Ark | `@arkade-os/sdk` + Boltz swap（オプション） |
+| Bitrefill | `@bitrefill/cli` — MCP API ラッパー |
 | ブラウザ | Playwright headless Chrome |
 | 設定 | zod validation + dotenv |
 | 暗号化 | AES-256-GCM（proof ストレージ） |
@@ -568,4 +506,24 @@ pnpm dev          # tsx watch mode
 pnpm build        # TypeScript compile
 pnpm start        # 本番起動
 pnpm test         # vitest
+pnpm lint         # tsc --noEmit
+```
+
+### ヘルパースクリプト
+
+```bash
+# Cashu 残高確認
+npx tsx scripts/check-cashu-balance.ts
+
+# Lightning チャージ用 invoice 発行
+npx tsx scripts/cashu-create-invoice.ts 2000
+
+# 支払い済み invoice を claim
+npx tsx scripts/cashu-claim-invoice.ts <quoteId> <amountSats>
+
+# BOLT11 invoice を Cashu で支払い
+npx tsx scripts/cashu-pay-bolt11.ts <bolt11>
+
+# Bitrefill E2E 購入テスト
+npx tsx scripts/test-bitrefill-buy.ts
 ```
