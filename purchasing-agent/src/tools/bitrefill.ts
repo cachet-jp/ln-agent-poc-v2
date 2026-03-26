@@ -9,20 +9,23 @@ import {
   unsealOrder,
   getAccountBalance,
   getOrder,
+  hasBitrefillCredentials,
 } from "../lib/bitrefill-client.js";
 import { payBolt11 } from "../lib/payment-strategy.js";
-import { getConfig } from "../lib/config.js";
 import type { BitrefillPurchaseResult } from "../types.js";
 
 /**
  * Register Bitrefill MCP tools on the server.
- * All tools require BITREFILL_API_ID + BITREFILL_API_SECRET (Bitrefill API requires auth for all endpoints).
+ *
+ * Requires one of:
+ *   - BITREFILL_API_KEY (recommended — single key from bitrefill.com/account/developers)
+ *   - BITREFILL_API_ID (backward compat)
+ *   - BITREFILL_API_SECRET (backward compat)
+ *
+ * Internally wraps @bitrefill/cli which uses the Bitrefill MCP API.
  */
 export function registerBitrefillTools(server: McpServer): void {
-  const config = getConfig();
-  const hasCredentials = !!(config.BITREFILL_API_ID && config.BITREFILL_API_SECRET);
-
-  if (!hasCredentials) {
+  if (!hasBitrefillCredentials()) {
     return; // No credentials — skip all Bitrefill tools
   }
 
