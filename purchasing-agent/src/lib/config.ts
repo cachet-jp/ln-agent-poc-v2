@@ -42,6 +42,10 @@ const configSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
 
+  // Bitrefill
+  BITREFILL_API_ID: optStr,
+  BITREFILL_API_SECRET: optStr,
+
   // Guardrails
   MAX_SPEND_JPY: z.coerce.number().positive().default(5000),
 

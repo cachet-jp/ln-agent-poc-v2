@@ -6,6 +6,14 @@
       "env": {
         "NODE_ENV": "development"
       }
+    },
+    "bitrefill": {
+      "command": "npx",
+      "args": ["-y", "bitrefill-mcp-server"],
+      "env": {
+        "BITREFILL_API_ID": "",
+        "BITREFILL_API_SECRET": ""
+      }
     }
   }
 }
