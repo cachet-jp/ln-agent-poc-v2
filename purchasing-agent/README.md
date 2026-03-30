@@ -1,9 +1,12 @@
 # Purchasing Agent
 
-Bitcoin でギフトカード・eSIM・モバイルトップアップを購入する MCP サーバー。
+Bitcoin でギフトカード・eSIM・モバイルトップアップ・デジタルコンテンツを購入する MCP サーバー。
 
 - **UseBitcoin.jp**: 国内 6 種類のギフトカード（Kyash・V-Preca・QUO カード Pay・au PAY・DMM・BitCash）
 - **Bitrefill**: 世界 180+ カ国、1,500+ ブランドのギフトカード・eSIM・モバイルトップアップ
+- **Amazon**: V-Preca 経由で Amazon ギフト残高チャージ・商品購入
+- **DMM**: ポイントコード経由でデジタルコンテンツ購入
+- **DLsite**: BitCash 経由でデジタルコンテンツ購入
 
 Cashu ecash または Ark ウォレットから Lightning 支払いで購入します。
 
@@ -364,6 +367,7 @@ bitrefill list-orders --include_redemption_info true
 | `usebitcoin_buy_gift_card` | ギフトカード購入（product + amount を指定） |
 | `usebitcoin_list_products` | 商品カタログ一覧 |
 | `usebitcoin_buy_vpreca` | V-Preca 購入（レガシー互換） |
+| `vpreca_inquiry` | V-Preca ギフト照会（ギフトコード + カード下4桁 → フルカード情報取得） |
 
 ### Bitrefill 購入（要 `BITREFILL_API_KEY`）
 
@@ -389,6 +393,37 @@ bitrefill list-orders --include_redemption_info true
 | `cashu_mint_tokens` | Ark → Cashu チャージ | Hybrid のみ |
 | `cashu_check_proofs` | proof の有効性チェック・spent 自動削除 | Cashu-only / Hybrid |
 | `cashu_get_mint_info` | Cashu Mint のメタ情報 | Cashu-only / Hybrid |
+
+### Amazon 購入（要 `AMAZON_EMAIL` + `AMAZON_PASSWORD`）
+
+| ツール | 説明 |
+|--------|------|
+| `amazon_create_account` | Amazon アカウント作成（半自動・Anti-Detection 対応） |
+| `amazon_continue` | アカウント作成フローの次ステップ（OTP/CAPTCHA 入力等） |
+| `amazon_session_screenshot` | 現在のブラウザセッションのスクリーンショット取得 |
+| `amazon_session_close` | ブラウザセッションを閉じる |
+| `amazon_save_session` | セッション Cookie を保存 |
+| `amazon_check_session` | 保存済みセッションの有効性確認 |
+| `amazon_login` | Amazon にログイン（Cookie またはクレデンシャル） |
+| `amazon_charge_vpreca` | V-Preca でAmazon ギフト残高をチャージ |
+| `amazon_purchase` | Amazon で商品を購入 |
+
+### DMM 購入（要 `DMM_EMAIL` + `DMM_PASSWORD`）
+
+| ツール | 説明 |
+|--------|------|
+| `dmm_create_account` | DMM アカウント作成（半自動） |
+| `dmm_login` | DMM.com にログイン |
+| `dmm_charge_points` | UseBitcoin の DMM ポイントコードでチャージ |
+| `dmm_purchase` | DMM デジタルコンテンツを購入 |
+
+### DLsite 購入（要 `DLSITE_EMAIL` + `DLSITE_PASSWORD`）
+
+| ツール | 説明 |
+|--------|------|
+| `dlsite_create_account` | DLsite アカウント作成（半自動） |
+| `dlsite_login` | DLsite.com にログイン |
+| `dlsite_purchase` | DLsite デジタルコンテンツを BitCash で購入 |
 
 ### Ark ウォレット（Hybrid モードのみ）
 
@@ -431,6 +466,27 @@ bitrefill list-orders --include_redemption_info true
 | `BITREFILL_API_ID` | — | — | 公式 MCP サーバー用 ID（`API_KEY` と同じ値で OK） |
 | `BITREFILL_API_SECRET` | — | — | 公式 MCP サーバー用 SECRET（`API_KEY` と同じ値で OK） |
 
+### Amazon（Amazon 購入で必要）
+
+| 変数 | 必須 | デフォルト | 説明 |
+|------|:----:|-----------|------|
+| `AMAZON_EMAIL` | — | — | Amazon アカウントのメールアドレス |
+| `AMAZON_PASSWORD` | — | — | Amazon アカウントのパスワード |
+
+### DMM（DMM 購入で必要）
+
+| 変数 | 必須 | デフォルト | 説明 |
+|------|:----:|-----------|------|
+| `DMM_EMAIL` | — | — | DMM アカウントのメールアドレス |
+| `DMM_PASSWORD` | — | — | DMM アカウントのパスワード |
+
+### DLsite（DLsite 購入で必要）
+
+| 変数 | 必須 | デフォルト | 説明 |
+|------|:----:|-----------|------|
+| `DLSITE_EMAIL` | — | — | DLsite アカウントのメールアドレス |
+| `DLSITE_PASSWORD` | — | — | DLsite アカウントのパスワード |
+
 ### 共通
 
 | 変数 | 必須 | デフォルト | 説明 |
@@ -453,6 +509,15 @@ bitrefill list-orders --include_redemption_info true
 
 [Bitrefill — Cashu + CLI]
   Cashu ecash → melt → Mint が Lightning 代行 → Bitrefill CLI → ギフトコード/eSIM
+
+[Amazon — V-Preca 経由]
+  UseBitcoin で V-Preca 購入 → vpreca_inquiry でフルカード取得 → Amazon ギフト残高チャージ → 商品購入
+
+[DMM — ポイントコード経由]
+  UseBitcoin で DMM ポイント購入 → DMM にチャージ → デジタルコンテンツ購入
+
+[DLsite — BitCash 経由]
+  UseBitcoin で BitCash 購入 → DLsite で BitCash 支払い → デジタルコンテンツ購入
 ```
 
 ### システム構成
@@ -476,12 +541,15 @@ bitrefill list-orders --include_redemption_info true
 │  Bitrefill Client ──── @bitrefill/cli                │
 │  (bitrefill-client.ts)  (MCP API wrapper)            │
 │                                                      │
-│  Playwright  (headless Chrome for UseBitcoin.jp)     │
-└──────┬──────────────┬──────────────┬─────────────────┘
-       │              │              │
-       ▼              ▼              ▼
-  Cashu Mint     UseBitcoin.jp    Bitrefill
-  (Lightning 代行) (国内ギフト)   (世界 1500+ ブランド)
+│  Amazon / DMM / DLsite  (Playwright 自動化)          │
+│  V-Preca Inquiry  (Lifecard 照会ページ)              │
+│                                                      │
+│  Playwright  (headless Chrome)                       │
+└──────┬──────────┬──────────┬──────────┬──────────────┘
+       │          │          │          │
+       ▼          ▼          ▼          ▼
+  Cashu Mint  UseBitcoin  Bitrefill  Amazon/DMM/DLsite
+  (Lightning)  (国内ギフト) (世界1500+) (EC/デジタル)
 ```
 
 ### 技術スタック
