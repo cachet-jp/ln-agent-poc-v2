@@ -24,6 +24,7 @@
     "@clw-cash/skills": "link:../claw-cash/skills",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "dotenv": "^16.4.7",
+    "eventsource": "^4.1.0",
     "playwright": "^1.50.1",
     "qrcode": "^1.5.4",
     "zod": "^3.24.2"

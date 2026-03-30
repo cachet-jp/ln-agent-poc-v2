@@ -317,10 +317,91 @@ export function registerUseBitcoinTools(server: McpServer): void {
       } catch (err) {
         return {
           content: [
+            { type: "text" as const, text: `V-Preca purchase failed: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---- Legacy DMM tool (backward compatible) ----
+  const DMM_AMOUNTS = PRODUCT_CATALOG.dmm.amounts;
+  server.tool(
+    "usebitcoin_buy_dmm_points",
+    "Buy a DMM point code on UseBitcoin.jp using Lightning payment (8% discount). " +
+      "Returns the point code string to charge on DMM.com. " +
+      `Valid amounts (JPY): ${DMM_AMOUNTS.join(", ")}`,
+    {
+      amount: z
+        .number()
+        .int()
+        .refine((v) => DMM_AMOUNTS.includes(v), {
+          message: `Amount must be one of: ${DMM_AMOUNTS.join(", ")}`,
+        })
+        .describe(`DMM point code amount in JPY. Valid: ${DMM_AMOUNTS.join(", ")}`),
+    },
+    async ({ amount }) => {
+      try {
+        const result = await buyGiftCard("dmm", amount);
+        return {
+          content: [
             {
               type: "text" as const,
-              text: `V-Preca purchase failed: ${(err as Error).message}`,
+              text: JSON.stringify(
+                { success: true, code: result.code, amount: result.amount, orderId: result.orderId },
+                null,
+                2,
+              ),
             },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text" as const, text: `DMM point code purchase failed: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---- Legacy BitCash tool (backward compatible) ----
+  const BITCASH_AMOUNTS = PRODUCT_CATALOG.bitcash.amounts;
+  server.tool(
+    "usebitcoin_buy_bitcash",
+    "Buy a BitCash code on UseBitcoin.jp using Lightning payment. " +
+      "Returns the BitCash hiragana ID for use on DLsite, Niconico, etc. " +
+      `Valid amounts (JPY): ${BITCASH_AMOUNTS.join(", ")}`,
+    {
+      amount: z
+        .number()
+        .int()
+        .refine((v) => BITCASH_AMOUNTS.includes(v), {
+          message: `Amount must be one of: ${BITCASH_AMOUNTS.join(", ")}`,
+        })
+        .describe(`BitCash amount in JPY. Valid: ${BITCASH_AMOUNTS.join(", ")}`),
+    },
+    async ({ amount }) => {
+      try {
+        const result = await buyGiftCard("bitcash", amount);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                { success: true, hiraganaId: result.code, amount: result.amount, orderId: result.orderId },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text" as const, text: `BitCash purchase failed: ${(err as Error).message}` },
           ],
           isError: true,
         };
@@ -330,17 +411,13 @@ export function registerUseBitcoinTools(server: McpServer): void {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers — Lightning invoice extraction
 // ---------------------------------------------------------------------------
 
-/**
- * Extract bolt11 Lightning invoice from the payment page DOM.
- * Uses multiple strategies to find the invoice string.
- */
 async function extractLightningInvoiceFromPage(
   page: import("playwright").Page,
 ): Promise<string | null> {
-  // Strategy 1: Check for a copy button with invoice data attribute
+  // Strategy 1: Copy button with data attribute
   const copyBtn = page
     .getByRole("button", { name: /インボイスをコピー|コピー|copy/i })
     .first();
@@ -349,16 +426,15 @@ async function extractLightningInvoiceFromPage(
     if (dataInvoice && dataInvoice.startsWith("lnbc")) return dataInvoice;
   }
 
-  // Strategy 2: Find text starting with lnbc in page body text
+  // Strategy 2: Find lnbc in page text
   const allText = await page.textContent("body");
   if (allText) {
     const match = allText.match(/\b(lnbc[a-z0-9]+)\b/i);
     if (match) return match[1];
   }
 
-  // Strategy 3: Search DOM innerHTML for hidden invoice data
+  // Strategy 3: Search DOM for hidden invoice data
   const invoice = await page.evaluate(() => {
-    // Check data attributes
     const els = document.querySelectorAll("[data-invoice], [data-bolt11], [data-value]");
     for (const el of els) {
       for (const attr of ["data-invoice", "data-bolt11", "data-value"]) {
@@ -366,7 +442,6 @@ async function extractLightningInvoiceFromPage(
         if (val && val.startsWith("lnbc")) return val;
       }
     }
-    // Search full innerHTML for lnbc pattern
     const all = document.body.innerHTML;
     const match = all.match(/(lnbc[a-z0-9]{50,})/i);
     return match ? match[1] : null;
@@ -408,6 +483,22 @@ async function extractGiftCodeGeneric(
       /コード\s*\d+\/\d+\s*([A-Za-z0-9]{10,20})\s*(\d{4})/,
     );
     if (match) return { code: match[1], secondaryCode: match[2] };
+  }
+
+  // BitCash pattern: hiragana ID
+  if (product === "bitcash") {
+    const hiraganaMatch = bodyText.match(/コード\s*\d*\/?\d*\s*([\u3040-\u309F]{8,20})/);
+    if (hiraganaMatch) return { code: hiraganaMatch[1] };
+    const fallbackHiragana = bodyText.match(/([\u3040-\u309F]{8,20})/);
+    if (fallbackHiragana) return { code: fallbackHiragana[1] };
+  }
+
+  // DMM pattern: hyphenated code (e.g. "XXXX-XXXX-XXXX-XXXX")
+  if (product === "dmm") {
+    const hyphenatedMatch = bodyText.match(
+      /コード\s*\d*\/?\d*\s*([A-Za-z0-9]{4,6}(?:-[A-Za-z0-9]{4,6}){2,4})/,
+    );
+    if (hyphenatedMatch) return { code: hyphenatedMatch[1] };
   }
 
   // Generic: "コード" followed by an alphanumeric string
