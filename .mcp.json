@@ -2,7 +2,8 @@
   "mcpServers": {
     "purchasing-agent": {
       "command": "npx",
-      "args": ["tsx", "purchasing-agent/src/server.ts"],
+      "args": ["tsx", "src/server.ts"],
+      "cwd": "purchasing-agent",
       "env": {
         "NODE_ENV": "development"
       }

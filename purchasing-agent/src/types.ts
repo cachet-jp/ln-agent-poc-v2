@@ -88,6 +88,74 @@ export interface AmazonPurchaseResult {
   totalAmount: string;
 }
 
+/** Amazon account creation page states */
+export type AmazonPageState =
+  | "registration_form"
+  | "captcha"
+  | "puzzle"
+  | "email_otp"
+  | "sms_otp"
+  | "success"
+  | "error"
+  | "unknown";
+
+/** Result returned by Amazon account creation flow tools */
+export interface AmazonAccountFlowResult {
+  step: AmazonPageState;
+  message: string;
+  credentials?: { email: string; password: string };
+}
+
+/** UseBitcoin purchase result (common to all products) */
+export interface UseBitcoinOrderResult {
+  orderId: string;
+  orderPageUrl: string;
+}
+
+/** DMM point code from UseBitcoin */
+export interface DmmPointCode {
+  /** Point code string */
+  code: string;
+  /** Amount in JPY */
+  amount: number;
+}
+
+/** BitCash code from UseBitcoin */
+export interface BitCashCode {
+  /** BitCash hiragana ID */
+  hiraganaId: string;
+  /** Amount in JPY */
+  amount: number;
+}
+
+/** DMM purchase result */
+export interface DmmPurchaseResult {
+  title: string;
+  pointsUsed: number;
+  remainingPoints: number;
+}
+
+/** DLsite purchase result */
+export interface DlsitePurchaseResult {
+  title: string;
+  paymentMethod: string;
+  totalAmount: string;
+}
+
+/** V-Preca card details retrieved from Lifecard inquiry page */
+export interface VPrecaCardDetails {
+  /** Full 16-digit card number */
+  cardNumber: string;
+  /** Expiry date (MM/YY) */
+  expiryDate: string;
+  /** Security code (CVV, 3 digits) */
+  securityCode: string;
+  /** Remaining balance in JPY */
+  balance: number;
+  /** Card name if displayed */
+  cardName?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Bitrefill types
 // ---------------------------------------------------------------------------

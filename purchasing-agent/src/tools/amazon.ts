@@ -9,20 +9,88 @@ import { join } from "node:path";
 const AMAZON_BASE = "https://www.amazon.co.jp";
 const STORAGE_STATE_PATH = join(process.cwd(), "storage-state", "amazon.json");
 
+/**
+ * Verify if saved session cookies are still valid by navigating to Amazon
+ * and checking for the logged-in nav bar element.
+ */
+async function verifySessionCookies(): Promise<boolean> {
+  if (!existsSync(STORAGE_STATE_PATH)) return false;
+
+  let page;
+  try {
+    page = await newPage(STORAGE_STATE_PATH);
+    await page.goto(`${AMAZON_BASE}/`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+    await humanDelay(1500, 3000);
+
+    const loggedIn = await page
+      .locator("#nav-link-accountList")
+      .isVisible()
+      .catch(() => false);
+
+    // Check that the nav text doesn't say "ログイン" / "サインイン"
+    if (loggedIn) {
+      const navText =
+        (await page
+          .locator("#nav-link-accountList .nav-line-1")
+          .textContent()
+          .catch(() => "")) ?? "";
+      const isActuallyLoggedIn =
+        !navText.includes("ログイン") && !navText.includes("サインイン");
+      await page.context().close();
+      return isActuallyLoggedIn;
+    }
+
+    await page.context().close();
+    return false;
+  } catch {
+    if (page) {
+      try { await page.context().close(); } catch { /* ignore */ }
+    }
+    return false;
+  }
+}
+
 export function registerAmazonTools(server: McpServer): void {
   // ---- amazon_login ----
   server.tool(
     "amazon_login",
-    "Log in to Amazon.co.jp with email and password. Saves session cookies for subsequent calls.",
+    "Amazon.co.jp にログインします。保存済みセッションクッキーがあればそれを検証し、" +
+      "無効な場合は .env の AMAZON_EMAIL/AMAZON_PASSWORD でログインを試みます。" +
+      "セッションクッキーのみで運用する場合は amazon_save_session でセッションを保存してください。",
     {},
     async () => {
+      // Strategy 1: Try saved session cookies first
+      if (existsSync(STORAGE_STATE_PATH)) {
+        const valid = await verifySessionCookies();
+        if (valid) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "✅ 保存済みセッションクッキーは有効です。ログイン不要です。",
+              },
+            ],
+          };
+        }
+      }
+
+      // Strategy 2: Credential-based login
       const config = getConfig();
       if (!config.AMAZON_EMAIL || !config.AMAZON_PASSWORD) {
         return {
           content: [
             {
               type: "text" as const,
-              text: "Error: AMAZON_EMAIL and AMAZON_PASSWORD must be set in .env",
+              text: [
+                "セッションクッキーが無効または未保存で、.env に AMAZON_EMAIL/AMAZON_PASSWORD も設定されていません。",
+                "",
+                "以下のいずれかを行ってください:",
+                "1. amazon_save_session を呼び出してブラウザで手動ログイン → クッキー保存",
+                "2. .env に AMAZON_EMAIL と AMAZON_PASSWORD を設定して再起動",
+              ].join("\n"),
             },
           ],
           isError: true,
@@ -66,7 +134,7 @@ export function registerAmazonTools(server: McpServer): void {
             content: [
               {
                 type: "text" as const,
-                text: "Login requires 2FA or CAPTCHA. Please use a test account without 2FA, or complete verification manually.",
+                text: "2FA または CAPTCHA が必要です。amazon_save_session で手動ログインしてください。",
               },
             ],
             isError: true,
@@ -85,7 +153,7 @@ export function registerAmazonTools(server: McpServer): void {
             content: [
               {
                 type: "text" as const,
-                text: "Login may have failed — could not verify logged-in state. Check credentials.",
+                text: "ログインに失敗した可能性があります。認証情報を確認してください。",
               },
             ],
             isError: true,
@@ -100,7 +168,7 @@ export function registerAmazonTools(server: McpServer): void {
 
         return {
           content: [
-            { type: "text" as const, text: "Successfully logged in to Amazon.co.jp. Session saved." },
+            { type: "text" as const, text: "✅ Amazon.co.jp にログインしました。セッションを保存済みです。" },
           ],
         };
       } catch (err) {
@@ -109,7 +177,7 @@ export function registerAmazonTools(server: McpServer): void {
         }
         return {
           content: [
-            { type: "text" as const, text: `Amazon login failed: ${(err as Error).message}` },
+            { type: "text" as const, text: `Amazon ログイン失敗: ${(err as Error).message}` },
           ],
           isError: true,
         };
@@ -130,7 +198,10 @@ export function registerAmazonTools(server: McpServer): void {
       if (!existsSync(STORAGE_STATE_PATH)) {
         return {
           content: [
-            { type: "text" as const, text: "Error: Not logged in. Call amazon_login first." },
+            {
+              type: "text" as const,
+              text: "未ログインです。先に amazon_login または amazon_save_session でセッションを保存してください。",
+            },
           ],
           isError: true,
         };
@@ -238,7 +309,10 @@ export function registerAmazonTools(server: McpServer): void {
       if (!existsSync(STORAGE_STATE_PATH)) {
         return {
           content: [
-            { type: "text" as const, text: "Error: Not logged in. Call amazon_login first." },
+            {
+              type: "text" as const,
+              text: "未ログインです。先に amazon_login または amazon_save_session でセッションを保存してください。",
+            },
           ],
           isError: true,
         };
