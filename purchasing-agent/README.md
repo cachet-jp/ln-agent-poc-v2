@@ -20,6 +20,7 @@ Cashu ecash または Ark ウォレットから Lightning 支払いで購入し�
 4. [セットアップ B — Claude Code SKILL として使う](#セットアップ-b--claude-code-skill-として使う)
 5. [Bitrefill 連携](#bitrefill-連携)
 6. [MCP ツール一覧](#mcp-ツール一覧)
+   - [V-Preca カード照会](#v-preca-カード照会)
 7. [環境変数リファレンス](#環境変数リファレンス)
 8. [アーキテクチャ](#アーキテクチャ)
 9. [開発](#開発)
@@ -368,6 +369,43 @@ bitrefill list-orders --include_redemption_info true
 | `usebitcoin_list_products` | 商品カタログ一覧 |
 | `usebitcoin_buy_vpreca` | V-Preca 購入（レガシー互換） |
 | `vpreca_inquiry` | V-Preca ギフト照会（ギフトコード + カード下4桁 → フルカード情報取得） |
+
+#### V-Preca カード照会
+
+V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Lifecard 照会ページに入力して **フルカード情報（カード番号・有効期限・CVV・残高）** を取得します。
+
+**パラメータ**
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `giftCode` | string | V-Preca ギフトコード（UseBitcoin 購入時に取得） |
+| `cardLast4` | string | カード番号下4桁（数字4桁） |
+
+**返り値**
+
+```json
+{
+  "success": true,
+  "cardNumber": "4444123456789012",
+  "expiryDate": "10 / 28",
+  "securityCode": "917",
+  "balance": 500,
+  "cardName": "VPRECA"
+}
+```
+
+**ワークフロー例（V-Preca で Amazon にチャージ）**
+
+```
+1. usebitcoin_buy_gift_card(product: "vpreca", amount: 500)
+   → { voucherCode: "GkMPMzZcAHus4F1", cardLast4: "1234" }
+
+2. vpreca_inquiry(giftCode: "GkMPMzZcAHus4F1", cardLast4: "1234")
+   → { cardNumber: "4444...", expiryDate: "10/28", securityCode: "917", balance: 500 }
+
+3. amazon_charge_vpreca(cardNumber: "4444...", expiryDate: "10/28", securityCode: "917")
+   → Amazon ギフト残高に 500 円チャージ完了
+```
 
 ### Bitrefill 購入（要 `BITREFILL_API_KEY`）
 
