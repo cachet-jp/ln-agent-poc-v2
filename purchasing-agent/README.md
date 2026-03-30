@@ -1,6 +1,6 @@
 # Purchasing Agent
 
-Bitcoin でギフトカード・eSIM・モバイルトップアップ・デジタルコンテンツを購入する MCP サーバー。
+Bitcoin でギフトカード・eSIM・モバイルトップアップ・デジタルコンテンツを購入する MCP サーバーとスキル。
 
 - **UseBitcoin.jp**: 国内 6 種類のギフトカード（Kyash・V-Preca・QUO カード Pay・au PAY・DMM・BitCash）
 - **Bitrefill**: 世界 180+ カ国、1,500+ ブランドのギフトカード・eSIM・モバイルトップアップ
