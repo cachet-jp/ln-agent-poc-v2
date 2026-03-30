@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 
 // Load .env from the purchasing-agent package root (not CWD)
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenvConfig({ path: resolve(__dirname, "../../.env"), override: true });
+dotenvConfig({ path: resolve(__dirname, "../../.env") });
 
 // Treat empty strings as undefined (Claude Desktop passes "" for unset env vars)
 const optStr = z.preprocess(
@@ -25,6 +25,14 @@ const configSchema = z.object({
   // Amazon
   AMAZON_EMAIL: optStr,
   AMAZON_PASSWORD: optStr,
+
+  // DMM
+  DMM_EMAIL: optStr,
+  DMM_PASSWORD: optStr,
+
+  // DLsite
+  DLSITE_EMAIL: optStr,
+  DLSITE_PASSWORD: optStr,
 
   // clw.cash / Ark
   CLW_API_BASE_URL: z.string().url().default("https://api.clw.cash"),

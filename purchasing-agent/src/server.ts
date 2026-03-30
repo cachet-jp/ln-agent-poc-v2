@@ -32,6 +32,12 @@ if (config.CASHU_MINT_URL) {
   registerUseBitcoinTools(server);
 }
 
+// V-Preca inquiry — retrieve full card details from gift code + card last 4 digits
+{
+  const { registerVPrecaInquiryTools } = await import("./tools/vpreca-inquiry.js");
+  registerVPrecaInquiryTools(server);
+}
+
 // Ark wallet tools — depend on claw-cash submodule; skip if unavailable
 try {
   const { registerArkTools } = await import("./tools/ark-wallet.js");
@@ -55,6 +61,26 @@ if (config.AMAZON_EMAIL && config.AMAZON_PASSWORD) {
     registerAmazonSetupTools(server);
   } catch (err) {
     console.error(`[purchasing-agent] Amazon tools unavailable: ${(err as Error).message}`);
+  }
+}
+
+// DMM tools — only registered when credentials are configured
+if (config.DMM_EMAIL && config.DMM_PASSWORD) {
+  try {
+    const { registerDmmTools } = await import("./tools/dmm.js");
+    registerDmmTools(server);
+  } catch (err) {
+    console.error(`[purchasing-agent] DMM tools unavailable: ${(err as Error).message}`);
+  }
+}
+
+// DLsite tools — only registered when credentials are configured
+if (config.DLSITE_EMAIL && config.DLSITE_PASSWORD) {
+  try {
+    const { registerDlsiteTools } = await import("./tools/dlsite.js");
+    registerDlsiteTools(server);
+  } catch (err) {
+    console.error(`[purchasing-agent] DLsite tools unavailable: ${(err as Error).message}`);
   }
 }
 
