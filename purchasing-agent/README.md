@@ -180,6 +180,7 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 | `/cashu-manage` | Cashu ウォレット管理（残高・送受信・Lightning チャージ） |
 | `/auto-purchase` | BTC でギフトカードを自動購入（ステップバイステップ） |
 | `/bitrefill-purchase` | Bitrefill でギフトカード・eSIM を購入（世界 180+ カ国） |
+| `/vpreca-inquiry` | V-Preca カード照会（ギフトコード → フルカード情報取得） |
 
 ### B-3. 使い方の例
 
@@ -205,6 +206,16 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 ```
 > /bitrefill-purchase
 → 「Amazon Japan の ¥100 ギフトカード」
+```
+
+**V-Preca のカード番号を取得して Amazon にチャージ:**
+
+```
+> /vpreca-inquiry
+→ 「ギフトコード: GkMPMzZcAHus4F1、下4桁: 1234」
+→ （カード番号・有効期限・CVV・残高が表示される）
+→ 「Amazon にチャージしたい」
+→ amazon_charge_vpreca を実行してチャージ完了
 ```
 
 ### B-4. 別プロジェクトから SKILL だけ使う
