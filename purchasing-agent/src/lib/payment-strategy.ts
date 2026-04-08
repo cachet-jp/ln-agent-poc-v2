@@ -6,7 +6,7 @@
  */
 
 import { isCashuEnabled, getCashuConfig } from "./cashu-config.js";
-import { getCashuBalance, meltTokens } from "./cashu-client.js";
+import { meltTokens } from "./cashu-client.js";
 
 export type PaymentMethod = "ark" | "cashu" | "auto";
 
@@ -52,14 +52,12 @@ export async function payBolt11(
     return payViaArk(bolt11);
   }
 
-  // Try Cashu first
+  // Try Cashu first — meltTokens() validates balance internally,
+  // so we skip the redundant pre-check that would decrypt the proof store twice
   try {
-    const cashuBalance = await getCashuBalance();
-    if (cashuBalance.total > 0) {
-      return await payViaCashu(bolt11);
-    }
+    return await payViaCashu(bolt11);
   } catch {
-    // Cashu failed — fall through to Ark
+    // Cashu failed (insufficient balance or mint error) — fall through to Ark
   }
 
   // Fallback to Ark

@@ -124,7 +124,7 @@ export async function buyGiftCard(
     await page.waitForSelector('text=/インボイスをコピー|sats|lightning/i', {
       timeout: 30000,
     });
-    await humanDelay(2000, 3000);
+    await humanDelay(300, 600);
 
     // 5. Extract BOLT11 invoice
     const bolt11 = await extractLightningInvoiceFromPage(page);
@@ -147,7 +147,6 @@ export async function buyGiftCard(
         })
         .catch(() => null),
     ]);
-    await humanDelay(2000, 4000);
 
     // 8. Extract gift code(s)
     const giftData = await extractGiftCodeGeneric(page, product);
@@ -459,7 +458,7 @@ async function extractGiftCodeGeneric(
   page: import("playwright").Page,
   product: UseBitcoinProduct,
 ): Promise<{ code: string; secondaryCode?: string }> {
-  await humanDelay(1000, 2000);
+  await humanDelay(500, 1000);
 
   // Strategy 1: Readonly input fields (UseBitcoin renders codes in readonly inputs)
   const inputs = await page.locator("input[readonly], input[disabled]").all();

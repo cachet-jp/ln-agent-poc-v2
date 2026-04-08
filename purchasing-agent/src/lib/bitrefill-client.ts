@@ -221,14 +221,24 @@ export async function ping(): Promise<boolean> {
 // Polling helper
 // ---------------------------------------------------------------------------
 
+/** Result of waitForInvoicePaid — includes order data to avoid a redundant CLI call. */
+export interface PaidInvoiceResult {
+  invoice: BitrefillInvoice;
+  order: BitrefillOrder;
+}
+
 /**
  * Poll invoice status until it reaches a terminal state.
+ * Uses adaptive polling: starts fast (500ms) and doubles up to maxIntervalMs.
+ * On success, fetches the order with redemption info in a single CLI call
+ * so callers don't need a separate unsealOrder call.
  */
 export async function waitForInvoicePaid(
   invoiceId: string,
-  { intervalMs = 2000, timeoutMs = 60000 } = {},
-): Promise<BitrefillInvoice> {
+  { initialIntervalMs = 500, maxIntervalMs = 2000, timeoutMs = 60000 } = {},
+): Promise<PaidInvoiceResult> {
   const start = Date.now();
+  let interval = initialIntervalMs;
   while (Date.now() - start < timeoutMs) {
     const invoice = await getInvoice(invoiceId);
     if (
@@ -236,12 +246,16 @@ export async function waitForInvoicePaid(
       invoice.status === "completed" ||
       invoice.status === "paid"
     ) {
-      return invoice;
+      // Fetch order with redemption info in the same pass
+      const orderId = invoice.orderId ?? invoiceId;
+      const order = await getOrder(orderId);
+      return { invoice, order };
     }
     if (invoice.status === "expired" || invoice.status === "failed") {
       throw new Error(`Bitrefill invoice ${invoiceId} ${invoice.status}`);
     }
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise((r) => setTimeout(r, interval));
+    interval = Math.min(interval * 2, maxIntervalMs);
   }
   throw new Error(
     `Bitrefill invoice ${invoiceId} did not complete within ${timeoutMs / 1000}s`,
