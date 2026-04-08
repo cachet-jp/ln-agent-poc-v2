@@ -35,6 +35,14 @@ export function registerDmmTools(server: McpServer): void {
           });
           await humanDelay();
 
+          // DMM signup shows a method selection screen first.
+          // Click "メールアドレス" to reveal the email/password form.
+          const emailMethodBtn = page.getByText("メールアドレス").first();
+          if (await emailMethodBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await emailMethodBtn.click();
+            await humanDelay();
+          }
+
           // Fill email
           const emailInput = page.locator('input[name="email"], input[type="email"]').first();
           await emailInput.waitFor({ timeout: 10000 });
@@ -46,10 +54,22 @@ export function registerDmmTools(server: McpServer): void {
           await passwordInput.fill(config.DMM_PASSWORD);
           await humanDelay(300, 800);
 
-          // Note: reCAPTCHA must be solved by human
-          // Wait for human to complete reCAPTCHA + click submit + verify email
-          // The page should eventually redirect to a logged-in state
-          await page.waitForURL(/dmm\.com(?!.*signup)/, { timeout: 300000 }); // 5 min timeout
+          // Uncheck newsletter opt-in
+          const newsletter = page.locator('input[name="mail_magazine_com"]');
+          if (await newsletter.isChecked().catch(() => false)) {
+            await newsletter.uncheck();
+          }
+
+          // Click "認証メールを送信する" submit button
+          const submitBtn = page.locator('button:has-text("認証メールを送信"), input[type="submit"]').first();
+          if (await submitBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await submitBtn.click();
+            await humanDelay(2000, 3000);
+          }
+
+          // Note: reCAPTCHA may appear after submit — human must solve it.
+          // After reCAPTCHA + email verification, the page redirects to a logged-in state.
+          await page.waitForURL(/dmm\.com(?!.*(signup|welcome))/, { timeout: 300000 }); // 5 min timeout
           await humanDelay(2000, 3000);
 
           // Save session
@@ -192,22 +212,8 @@ export function registerDmmTools(server: McpServer): void {
 
       try {
         return await withPage(async (page) => {
-          // Navigate to point charge page
-          await page.goto(`${DMM_BASE}/my/-/point/`, {
-            waitUntil: "domcontentloaded",
-          });
-          await humanDelay();
-
-          // Look for point code input section
-          // DMM point charge page has a section for "ポイントコードを使う"
-          const codeLink = page.locator('a:has-text("ポイントコード"), a:has-text("コード入力")').first();
-          if (await codeLink.isVisible().catch(() => false)) {
-            await codeLink.click();
-            await humanDelay();
-          }
-
-          // Try navigating directly to the code redemption page
-          await page.goto(`${DMM_BASE}/my/-/point/code/`, {
+          // Navigate directly to the point code redemption page
+          await page.goto("https://point.dmm.com/pointcode/input", {
             waitUntil: "domcontentloaded",
           });
           await humanDelay();
@@ -238,7 +244,7 @@ export function registerDmmTools(server: McpServer): void {
 
           // Check for success message
           const bodyText = (await page.textContent("body")) ?? "";
-          const isSuccess = /チャージ完了|ポイント.*追加|成功|completed/.test(bodyText);
+          const isSuccess = /チャージ完了|チャージありがとう|ポイント.*追加|成功|completed/.test(bodyText);
 
           // Try to extract current point balance
           const balanceMatch = bodyText.match(/(?:残高|ポイント)[:\s]*([0-9,]+)/);
