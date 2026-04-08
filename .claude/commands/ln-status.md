@@ -23,7 +23,7 @@ fi
 
 ### Check via SSH (if tunnel not available)
 
-Get the EC2 IP from terraform or use `35.77.192.237` as fallback.
+Get the EC2 IP from terraform (`terraform output -raw public_ip`) or `LN_AGENT_IP` env var.
 
 ```bash
 # SSH to EC2 and run status checks

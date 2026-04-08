@@ -12,21 +12,21 @@ Terraform で以下のリソースを ap-northeast-1 に構築済み（26 リソ
 
 - **VPC**: 10.2.0.0/16 + パブリックサブネット (10.2.1.0/24, ap-northeast-1a) + IGW
 - **EC2**: t3.large, Ubuntu 22.04 (`ami-02c675df87c692fb0`), gp3 750GB (暗号化)
-- **Elastic IP**: `35.77.192.237`
+- **Elastic IP**: (see `terraform output public_ip`)
 - **Security Group**: SSH / BTC P2P (8333) / LN P2P (9735) / gRPC (10009) / REST (8080) / OpenClaw (8081)
 - **IAM Role**: Secrets Manager / S3 / CloudWatch / SSM アクセス
-- **S3**: `ln-agent-poc-173517262356`（アーティファクト用、暗号化+バージョニング）
+- **S3**: `${project_name}-${account_id}`（アーティファクト用、暗号化+バージョニング）
 - **Secrets Manager**: `ln-agent-poc/llm-api`（LLM API キー格納用）
 - **CloudWatch**: ロググループ 3 つ + ヘルスアラーム + SNS トピック
 - **tfstate**: `s3://a2a-poc-tfstate` で管理
 
 | 項目 | 値 |
 |---|---|
-| Instance ID | `i-08a631628d6936ac4` |
-| Public IP | `35.77.192.237` |
-| SSH | `ssh -i ~/.ssh/ln-agent-poc ubuntu@35.77.192.237` |
-| S3 Bucket | `ln-agent-poc-173517262356` |
-| AWS Profile | `AdministratorAccess-173517262356` |
+| Instance ID | (see `terraform output instance_id`) |
+| Public IP | (see `terraform output public_ip`) |
+| SSH | `ssh -i ~/.ssh/ln-agent-poc ubuntu@$(terraform output -raw public_ip)` |
+| S3 Bucket | (see `terraform output s3_bucket`) |
+| AWS Profile | (configured via `var.aws_profile`) |
 
 ### 2. EC2 初期セットアップ ✅
 
@@ -36,7 +36,7 @@ Terraform で以下のリソースを ap-northeast-1 に構築済み（26 リソ
 
 ### 3. OpenClaw 単体起動 ✅
 
-- `ghcr.io/openclaw/openclaw:latest` イメージ取得済み
+- `ghcr.io/openclaw/openclaw:v0.5.0` イメージ取得済み
 - `docker-compose.openclaw.yml` で LND 無しで単体起動
 - Gateway: `ws://127.0.0.1:18789` (コンテナ内)
 - Auth token 生成済み
@@ -78,13 +78,13 @@ sso-session 名: 任意（例: sandbox）
 SSO start URL: https://cachet-jp.awsapps.com/start/
 SSO Region: ap-northeast-1
 Registration scopes: sso:account:access
-Profile: AdministratorAccess-173517262356
+Profile: <YOUR_AWS_PROFILE>
 ```
 
 ### OpenClaw コンテナ情報
 
 ```
-Image: ghcr.io/openclaw/openclaw:latest
+Image: ghcr.io/openclaw/openclaw:v0.5.0
 Internal gateway: ws://127.0.0.1:18789
 Internal browser control: http://127.0.0.1:18791
 Auth mode: token

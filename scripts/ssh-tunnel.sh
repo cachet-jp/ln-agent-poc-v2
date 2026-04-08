@@ -17,13 +17,16 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SSH_KEY="$HOME/.ssh/ln-agent-poc"
 PID_FILE="/tmp/ln-agent-ssh-tunnel.pid"
 
-# Get IP from terraform or use default
+# Get IP from env var or terraform state
 get_ip() {
-  if [ -f "$PROJECT_DIR/terraform/terraform.tfstate" ]; then
+  local IP="${LN_AGENT_IP:-}"
+  if [ -z "$IP" ] && [ -f "$PROJECT_DIR/terraform/terraform.tfstate" ]; then
     IP=$(cd "$PROJECT_DIR/terraform" && terraform output -raw public_ip 2>/dev/null || echo "")
   fi
   if [ -z "${IP:-}" ]; then
-    IP="35.77.192.237"  # fallback to known IP
+    echo "ERROR: Cannot determine EC2 IP." >&2
+    echo "Run 'cd terraform && terraform output -raw public_ip' or set LN_AGENT_IP env var." >&2
+    exit 1
   fi
   echo "$IP"
 }
@@ -38,7 +41,7 @@ start_tunnel() {
   echo "Starting SSH tunnel to $IP..."
 
   ssh -i "$SSH_KEY" \
-      -o StrictHostKeyChecking=no \
+      -o StrictHostKeyChecking=accept-new \
       -o ServerAliveInterval=60 \
       -o ServerAliveCountMax=3 \
       -N \

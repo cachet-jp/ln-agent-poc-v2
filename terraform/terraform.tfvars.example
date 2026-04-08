@@ -2,6 +2,7 @@
 # このファイルをコピーして terraform.tfvars を作成
 # cp terraform.tfvars.example terraform.tfvars
 
+aws_profile         = "default"        # AWS CLI profile name
 aws_region          = "ap-northeast-1"
 project_name        = "ln-agent-poc"
 operator_name       = "kohei"         # 自分の名前に変更

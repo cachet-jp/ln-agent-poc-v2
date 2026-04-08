@@ -11,6 +11,7 @@ import {
   hasBitrefillCredentials,
 } from "../lib/bitrefill-client.js";
 import { payBolt11 } from "../lib/payment-strategy.js";
+import { withErrorHandler } from "../lib/tool-helpers.js";
 import type { BitrefillPurchaseResult } from "../types.js";
 
 /**
@@ -39,39 +40,22 @@ export function registerBitrefillTools(server: McpServer): void {
       limit: z.number().int().positive().default(10).describe("Max results (default 10)"),
       category: z.string().optional().describe("Filter by category"),
     },
-    async ({ query, country, limit, category }) => {
-      try {
+    async ({ query, country, limit, category }) =>
+      withErrorHandler(async () => {
         const products = await searchProducts(query, { country, limit, category });
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  count: products.length,
-                  products: products.map((p) => ({
-                    id: p.id,
-                    name: p.name,
-                    country: p.country,
-                    currency: p.currency,
-                    category: p.category,
-                    range: p.range ?? null,
-                    packages: p.packages ?? null,
-                  })),
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          count: products.length,
+          products: products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            country: p.country,
+            currency: p.currency,
+            category: p.category,
+            range: p.range ?? null,
+            packages: p.packages ?? null,
+          })),
         };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Search failed: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- Product detail (no auth required) ----
@@ -81,19 +65,10 @@ export function registerBitrefillTools(server: McpServer): void {
     {
       productId: z.string().describe("Bitrefill product ID (from search results)"),
     },
-    async ({ productId }) => {
-      try {
-        const detail = await getProductDetail(productId);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(detail, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Detail fetch failed: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+    async ({ productId }) =>
+      withErrorHandler(async () => {
+        return await getProductDetail(productId);
+      }),
   );
 
   // ---- Categories (no auth required) ----
@@ -101,19 +76,10 @@ export function registerBitrefillTools(server: McpServer): void {
     "bitrefill_categories",
     "Get the full product type/categories map from Bitrefill.",
     {},
-    async () => {
-      try {
-        const categories = await getCategories();
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(categories, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Categories fetch failed: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+    async () =>
+      withErrorHandler(async () => {
+        return await getCategories();
+      }),
   );
 
   // ---- Purchase tool (Cashu/Ark wallet pays Lightning) ----
@@ -128,8 +94,8 @@ export function registerBitrefillTools(server: McpServer): void {
         quantity: z.number().int().positive().default(1).describe("Quantity (default 1)"),
         email: z.string().email().optional().describe("Email for delivery (some products require it)"),
       },
-      async ({ productId, value, packageId, quantity, email }) => {
-        try {
+      async ({ productId, value, packageId, quantity, email }) =>
+        withErrorHandler(async () => {
           // 1. Create invoice with Lightning payment method
           const invoiceProduct: Record<string, unknown> = {
             product_id: productId,
@@ -172,33 +138,8 @@ export function registerBitrefillTools(server: McpServer): void {
             fee: payResult.fee,
           };
 
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    ...result,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (err) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Bitrefill purchase failed: ${(err as Error).message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+          return { success: true, ...result };
+        }),
     );
 
     // ---- Order status (requires auth) ----
@@ -208,21 +149,10 @@ export function registerBitrefillTools(server: McpServer): void {
       {
         orderId: z.string().describe("Bitrefill order ID"),
       },
-      async ({ orderId }) => {
-        try {
-          const order = await getOrder(orderId);
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(order, null, 2) }],
-          };
-        } catch (err) {
-          return {
-            content: [
-              { type: "text" as const, text: `Order status failed: ${(err as Error).message}` },
-            ],
-            isError: true,
-          };
-        }
-      },
+      async ({ orderId }) =>
+        withErrorHandler(async () => {
+          return await getOrder(orderId);
+        }),
     );
 
     // ---- Account balance (requires auth) ----
@@ -230,20 +160,9 @@ export function registerBitrefillTools(server: McpServer): void {
       "bitrefill_account_balance",
       "Check your Bitrefill account balance.",
       {},
-      async () => {
-        try {
-          const balance = await getAccountBalance();
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(balance, null, 2) }],
-          };
-        } catch (err) {
-          return {
-            content: [
-              { type: "text" as const, text: `Balance check failed: ${(err as Error).message}` },
-            ],
-            isError: true,
-          };
-        }
-      },
+      async () =>
+        withErrorHandler(async () => {
+          return await getAccountBalance();
+        }),
     );
 }

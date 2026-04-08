@@ -16,6 +16,12 @@ services:
       - "28333"        # ZMQ tx
     restart: unless-stopped
     mem_limit: 4g
+    healthcheck:
+      test: ["CMD", "bitcoin-cli", "-rpcuser=bitcoinrpc", "-rpcpassword=$$BTC_RPC_PASS", "getblockchaininfo"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     logging:
       driver: json-file
       options:
@@ -36,6 +42,12 @@ services:
       - "10009:10009"  # gRPC (restricted via SG)
       - "8080:8080"    # REST (restricted via SG)
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "lncli", "getinfo"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     logging:
       driver: json-file
       options:
@@ -44,7 +56,7 @@ services:
 
   # === signal-cli REST API ===
   signal-cli:
-    image: bbernhard/signal-cli-rest-api:latest
+    image: bbernhard/signal-cli-rest-api:0.80
     container_name: signal-cli
     volumes:
       - signal_data:/home/.local/share/signal-cli
@@ -61,7 +73,7 @@ services:
 
   # === OpenClaw Agent ===
   openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
+    image: ghcr.io/openclaw/openclaw:v0.5.0
     container_name: openclaw-agent
     depends_on:
       - lnd
@@ -74,6 +86,12 @@ services:
     ports:
       - "8081:8081"    # Health check / admin (restricted via SG)
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     logging:
       driver: json-file
       options:

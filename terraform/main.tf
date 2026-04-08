@@ -8,18 +8,18 @@ terraform {
     }
   }
 
+  # Backend config is provided via -backend-config flags or backend.hcl
+  # Example: terraform init -backend-config=backend.hcl
   backend "s3" {
-    bucket  = "a2a-poc-tfstate"
     key     = "ln-agent/terraform.tfstate"
     region  = "ap-northeast-1"
     encrypt = true
-    profile = "AdministratorAccess-173517262356"
   }
 }
 
 provider "aws" {
   region  = var.aws_region
-  profile = "AdministratorAccess-173517262356"
+  profile = var.aws_profile
 
   default_tags {
     tags = {
