@@ -81,8 +81,8 @@ Configured in `docker/openclaw-config/agent.yaml`:
 - Bitcoin Core IBD takes 1-3 days on gp3 750GB
 - LND requires full chain data (txindex=1), no pruning
 - OpenClaw binds to localhost by default; external access needs config changes
-- AWS profile: `AdministratorAccess-173517262356` (sandbox)
-- tfstate stored in `s3://a2a-poc-tfstate`
+- AWS profile: configured via `var.aws_profile` in Terraform
+- tfstate stored in S3 (configured via `-backend-config`)
 
 ---
 

@@ -36,6 +36,19 @@ export async function newPage(storageStatePath?: string): Promise<Page> {
   return ctx.newPage();
 }
 
+/** Run a callback with a fresh page, closing the context afterwards */
+export async function withPage<T>(
+  fn: (page: Page) => Promise<T>,
+  storageStatePath?: string,
+): Promise<T> {
+  const page = await newPage(storageStatePath);
+  try {
+    return await fn(page);
+  } finally {
+    try { await page.context().close(); } catch { /* ignore cleanup errors */ }
+  }
+}
+
 /** Close the browser (cleanup) */
 export async function closeBrowser(): Promise<void> {
   if (_browser) {

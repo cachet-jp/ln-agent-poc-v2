@@ -5,7 +5,7 @@
       "command": "ssh",
       "args": [
         "-i", "~/.ssh/ln-agent-poc",
-        "-o", "StrictHostKeyChecking=no",
+        "-o", "StrictHostKeyChecking=accept-new",
         "-L", "18789:localhost:18789",
         "-L", "8081:localhost:8081",
         "ubuntu@${LN_AGENT_IP}",
