@@ -29,6 +29,11 @@ resource "aws_instance" "ln_agent" {
   iam_instance_profile   = aws_iam_instance_profile.ln_agent.name
   key_name               = aws_key_pair.poc.key_name
 
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
   root_block_device {
     volume_size = var.ebs_size_gb
     volume_type = "gp3"
