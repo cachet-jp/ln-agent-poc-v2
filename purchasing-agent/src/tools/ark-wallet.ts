@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getBalance, getReceiveAddresses, createLightningInvoice, payLightningInvoice, onboardBoardingUtxos } from "../lib/clw-client.js";
+import { withErrorHandler } from "../lib/tool-helpers.js";
 
 export function registerArkTools(server: McpServer): void {
   // ---- ark_get_balance ----
@@ -8,42 +9,24 @@ export function registerArkTools(server: McpServer): void {
     "ark_get_balance",
     "Get Ark wallet balance (offchain vTXO + onchain). Returns amounts in sats.",
     {},
-    async () => {
-      try {
-        const balance = await getBalance();
-        const formatSats = (n: number) => `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  total: formatSats(balance.total),
-                  offchain: {
-                    available: formatSats(balance.offchain.available),
-                    settled: formatSats(balance.offchain.settled),
-                    preconfirmed: formatSats(balance.offchain.preconfirmed),
-                    recoverable: formatSats(balance.offchain.recoverable),
-                  },
-                  onchain: {
-                    confirmed: formatSats(balance.onchain.confirmed),
-                    unconfirmed: formatSats(balance.onchain.unconfirmed),
-                    total: formatSats(balance.onchain.total),
-                  },
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+    async () => withErrorHandler(async () => {
+      const balance = await getBalance();
+      const formatSats = (n: number) => `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
+      return {
+        total: formatSats(balance.total),
+        offchain: {
+          available: formatSats(balance.offchain.available),
+          settled: formatSats(balance.offchain.settled),
+          preconfirmed: formatSats(balance.offchain.preconfirmed),
+          recoverable: formatSats(balance.offchain.recoverable),
+        },
+        onchain: {
+          confirmed: formatSats(balance.onchain.confirmed),
+          unconfirmed: formatSats(balance.onchain.unconfirmed),
+          total: formatSats(balance.onchain.total),
+        },
+      };
+    }),
   );
 
   // ---- ark_get_address ----
@@ -51,32 +34,14 @@ export function registerArkTools(server: McpServer): void {
     "ark_get_address",
     "Get Ark receive addresses (arkAddress for offchain, boardingAddress for onchain deposit).",
     {},
-    async () => {
-      try {
-        const addresses = await getReceiveAddresses();
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                addresses.map((a) => ({
-                  type: a.type,
-                  address: a.address,
-                  description: a.description,
-                })),
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+    async () => withErrorHandler(async () => {
+      const addresses = await getReceiveAddresses();
+      return addresses.map((a) => ({
+        type: a.type,
+        address: a.address,
+        description: a.description,
+      }));
+    }),
   );
 
   // ---- ark_create_invoice ----
@@ -87,34 +52,16 @@ export function registerArkTools(server: McpServer): void {
       amount: z.number().positive().describe("Amount in satoshis to receive"),
       description: z.string().optional().describe("Optional invoice description"),
     },
-    async ({ amount, description }) => {
-      try {
-        const invoice = await createLightningInvoice(amount, description);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  bolt11: invoice.bolt11,
-                  paymentHash: invoice.paymentHash,
-                  amount: `${invoice.amount.toLocaleString()} sats`,
-                  description: invoice.description ?? null,
-                  expirySeconds: invoice.expirySeconds,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error creating invoice: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+    async ({ amount, description }) => withErrorHandler(async () => {
+      const invoice = await createLightningInvoice(amount, description);
+      return {
+        bolt11: invoice.bolt11,
+        paymentHash: invoice.paymentHash,
+        amount: `${invoice.amount.toLocaleString()} sats`,
+        description: invoice.description ?? null,
+        expirySeconds: invoice.expirySeconds,
+      };
+    }),
   );
 
   // ---- ark_onboard ----
@@ -122,33 +69,15 @@ export function registerArkTools(server: McpServer): void {
     "ark_onboard",
     "Onboard confirmed boarding UTXOs into Ark offchain vTXOs. Call this after sending BTC to the boarding address and waiting for confirmation. Converts onchain balance to spendable offchain balance.",
     {},
-    async () => {
-      try {
-        const result = await onboardBoardingUtxos();
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  commitmentTxid: result.commitmentTxid,
-                  amount: `${result.amount.toLocaleString()} sats`,
-                  message: "Boarding UTXOs onboarded to Ark offchain. Balance should now show as offchain available.",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Onboard failed: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+    async () => withErrorHandler(async () => {
+      const result = await onboardBoardingUtxos();
+      return {
+        success: true,
+        commitmentTxid: result.commitmentTxid,
+        amount: `${result.amount.toLocaleString()} sats`,
+        message: "Boarding UTXOs onboarded to Ark offchain. Balance should now show as offchain available.",
+      };
+    }),
   );
 
   // ---- ark_pay_invoice ----
@@ -156,32 +85,14 @@ export function registerArkTools(server: McpServer): void {
     "ark_pay_invoice",
     "Pay a Lightning invoice using Ark wallet (via Boltz submarine swap). Provide a BOLT11 invoice string.",
     { bolt11: z.string().describe("BOLT11 Lightning invoice to pay") },
-    async ({ bolt11 }) => {
-      try {
-        const result = await payLightningInvoice(bolt11);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  preimage: result.preimage,
-                  amount: `${result.amount.toLocaleString()} sats`,
-                  txid: result.txid,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Payment failed: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+    async ({ bolt11 }) => withErrorHandler(async () => {
+      const result = await payLightningInvoice(bolt11);
+      return {
+        success: true,
+        preimage: result.preimage,
+        amount: `${result.amount.toLocaleString()} sats`,
+        txid: result.txid,
+      };
+    }),
   );
 }

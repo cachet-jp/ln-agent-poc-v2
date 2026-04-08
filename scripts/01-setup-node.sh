@@ -29,15 +29,23 @@ fi
 echo ""
 
 # --- bitcoin.conf のパスワード設定 ---
-BTC_RPC_PASS=$(openssl rand -hex 32)
-echo "[1/7] Setting Bitcoin RPC password..."
-sed -i "s/CHANGE_ME_STRONG_PASSWORD/$BTC_RPC_PASS/g" bitcoin.conf
-sed -i "s/CHANGE_ME_STRONG_PASSWORD/$BTC_RPC_PASS/g" lnd.conf
-echo "✅ RPC password set (stored in config files only)"
+if grep -q "CHANGE_ME_STRONG_PASSWORD" bitcoin.conf 2>/dev/null; then
+  BTC_RPC_PASS=$(openssl rand -hex 32)
+  echo "[1/7] Setting Bitcoin RPC password..."
+  sed -i "s/CHANGE_ME_STRONG_PASSWORD/${BTC_RPC_PASS//\//\\/}/g" bitcoin.conf
+  sed -i "s/CHANGE_ME_STRONG_PASSWORD/${BTC_RPC_PASS//\//\\/}/g" lnd.conf
+  echo "✅ RPC password set (stored in config files only)"
+else
+  echo "[1/7] Bitcoin RPC password already configured, skipping"
+fi
 
 # --- LND alias 設定 ---
-echo "[2/7] Setting LND alias to: ln-agent-${AGENT_NAME}..."
-sed -i "s/ln-agent-CHANGE_ME/ln-agent-${AGENT_NAME}/g" lnd.conf
+if grep -q "ln-agent-CHANGE_ME" lnd.conf 2>/dev/null; then
+  echo "[2/7] Setting LND alias to: ln-agent-${AGENT_NAME}..."
+  sed -i "s/ln-agent-CHANGE_ME/ln-agent-${AGENT_NAME}/g" lnd.conf
+else
+  echo "[2/7] LND alias already configured, skipping"
+fi
 
 # --- .env 作成 ---
 if [ ! -f ".env" ]; then
