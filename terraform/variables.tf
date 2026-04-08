@@ -28,9 +28,8 @@ variable "ebs_size_gb" {
 }
 
 variable "ssh_allowed_cidrs" {
-  description = "CIDR blocks allowed for SSH / gRPC / REST access (office IP). Defaults to empty list (no access) — override with your office CIDR."
+  description = "CIDR blocks allowed for SSH / gRPC / REST access (office IP)"
   type        = list(string)
-  default     = []
 }
 
 variable "ssh_public_key_path" {
