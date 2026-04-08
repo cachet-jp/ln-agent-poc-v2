@@ -478,12 +478,17 @@ async function extractGiftCodeGeneric(
     if (fallbackHiragana) return { code: fallbackHiragana[1] };
   }
 
-  // DMM pattern: hyphenated code (e.g. "XXXX-XXXX-XXXX-XXXX")
+  // DMM pattern: hyphenated (XXXX-XXXX-XXXX-XXXX) or plain alphanumeric code
   if (product === "dmm") {
     const hyphenatedMatch = bodyText.match(
       /コード\s*\d*\/?\d*\s*([A-Za-z0-9]{4,6}(?:-[A-Za-z0-9]{4,6}){2,4})/,
     );
     if (hyphenatedMatch) return { code: hyphenatedMatch[1] };
+    // Plain lowercase alphanumeric code (e.g. "5txkbqhxvq49fnpw")
+    const plainMatch = bodyText.match(
+      /コード\s*\d*\/?\d*\s*([a-z0-9]{12,20})/,
+    );
+    if (plainMatch) return { code: plainMatch[1] };
   }
 
   // Generic: "コード" followed by an alphanumeric string
