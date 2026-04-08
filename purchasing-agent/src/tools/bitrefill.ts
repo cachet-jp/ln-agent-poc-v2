@@ -6,7 +6,6 @@ import {
   getCategories,
   createInvoice,
   waitForInvoicePaid,
-  unsealOrder,
   getAccountBalance,
   getOrder,
   hasBitrefillCredentials,
@@ -155,16 +154,9 @@ export function registerBitrefillTools(server: McpServer): void {
             throw new Error("Lightning payment failed — no preimage received");
           }
 
-          // 3. Wait for Bitrefill to acknowledge payment
-          const paidInvoice = await waitForInvoicePaid(invoice.id);
-
-          // 4. Get order and unseal to reveal codes
-          const orderId = paidInvoice.orderId ?? invoice.orderId;
-          if (!orderId) {
-            throw new Error("No order ID returned from Bitrefill invoice");
-          }
-
-          const order = await unsealOrder(orderId);
+          // 3. Wait for Bitrefill to acknowledge payment & fetch order in one pass
+          const { order } = await waitForInvoicePaid(invoice.id);
+          const orderId = order.id ?? invoice.orderId ?? "unknown";
           const firstItem = order.items?.[0];
 
           const result: BitrefillPurchaseResult = {
