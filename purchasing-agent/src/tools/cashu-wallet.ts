@@ -17,6 +17,10 @@ import {
   createMintInvoice,
   claimMintInvoice,
 } from "../lib/cashu-client.js";
+import { jsonResponse, errorResponse, withErrorHandler } from "../lib/tool-helpers.js";
+
+const formatSats = (n: number) =>
+  `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
 
 export function registerCashuTools(server: McpServer): void {
   // ---- cashu_get_balance ----
@@ -24,34 +28,15 @@ export function registerCashuTools(server: McpServer): void {
     "cashu_get_balance",
     "Get Cashu ecash wallet balance. Returns total sats held as ecash tokens and the mint URL.",
     {},
-    async () => {
-      try {
+    async () =>
+      withErrorHandler(async () => {
         const balance = await getCashuBalance();
-        const formatSats = (n: number) =>
-          `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  total: formatSats(balance.total),
-                  proofCount: balance.proofCount,
-                  mintUrl: balance.mintUrl,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          total: formatSats(balance.total),
+          proofCount: balance.proofCount,
+          mintUrl: balance.mintUrl,
         };
-      } catch (err) {
-        return {
-          content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- cashu_mint_tokens ----
@@ -65,42 +50,18 @@ export function registerCashuTools(server: McpServer): void {
         .positive()
         .describe("Amount in satoshis to mint as ecash tokens"),
     },
-    async ({ amount }) => {
-      try {
+    async ({ amount }) =>
+      withErrorHandler(async () => {
         const result = await mintTokens(amount);
-        const formatSats = (n: number) =>
-          `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  amount: formatSats(result.amount),
-                  quoteId: result.quoteId,
-                  proofsReceived: result.proofs.length,
-                  message:
-                    "Cashu tokens minted successfully. Your Ark wallet was charged via Lightning.",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          success: true,
+          amount: formatSats(result.amount),
+          quoteId: result.quoteId,
+          proofsReceived: result.proofs.length,
+          message:
+            "Cashu tokens minted successfully. Your Ark wallet was charged via Lightning.",
         };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Mint failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- cashu_melt_tokens ----
@@ -111,41 +72,17 @@ export function registerCashuTools(server: McpServer): void {
     {
       bolt11: z.string().describe("BOLT11 Lightning invoice to pay"),
     },
-    async ({ bolt11 }) => {
-      try {
+    async ({ bolt11 }) =>
+      withErrorHandler(async () => {
         const result = await meltTokens(bolt11);
-        const formatSats = (n: number) =>
-          `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: result.paid,
-                  amount: formatSats(result.amount),
-                  fee: formatSats(result.fee),
-                  preimage: result.preimage,
-                  changeProofs: result.change.length,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          success: result.paid,
+          amount: formatSats(result.amount),
+          fee: formatSats(result.fee),
+          preimage: result.preimage,
+          changeProofs: result.change.length,
         };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Melt failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- cashu_send_tokens ----
@@ -159,39 +96,17 @@ export function registerCashuTools(server: McpServer): void {
         .positive()
         .describe("Amount in satoshis to send as ecash tokens"),
     },
-    async ({ amount }) => {
-      try {
+    async ({ amount }) =>
+      withErrorHandler(async () => {
         const result = await sendTokens(amount);
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  token: result.token,
-                  amount: `${result.amount.toLocaleString()} sats`,
-                  message:
-                    "Share this token string with the recipient. They can redeem it with any Cashu wallet.",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          success: true,
+          token: result.token,
+          amount: `${result.amount.toLocaleString()} sats`,
+          message:
+            "Share this token string with the recipient. They can redeem it with any Cashu wallet.",
         };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Send failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- cashu_receive_tokens ----
@@ -204,38 +119,16 @@ export function registerCashuTools(server: McpServer): void {
         .string()
         .describe("Cashu token string (starts with 'cashuA' or 'cashuB')"),
     },
-    async ({ token }) => {
-      try {
+    async ({ token }) =>
+      withErrorHandler(async () => {
         const result = await receiveTokens(token);
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  amount: `${result.amount.toLocaleString()} sats`,
-                  proofsReceived: result.proofs.length,
-                  message: "Tokens received and added to your Cashu wallet.",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          success: true,
+          amount: `${result.amount.toLocaleString()} sats`,
+          proofsReceived: result.proofs.length,
+          message: "Tokens received and added to your Cashu wallet.",
         };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Receive failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- cashu_check_proofs ----
@@ -244,18 +137,11 @@ export function registerCashuTools(server: McpServer): void {
     "Check the state of stored Cashu proofs (unspent/spent/pending). " +
       "Automatically removes spent proofs from the wallet.",
     {},
-    async () => {
-      try {
+    async () =>
+      withErrorHandler(async () => {
         const results = await checkProofStates();
         if (results.length === 0) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: "No proofs stored. Cashu wallet is empty.",
-              },
-            ],
-          };
+          return { message: "No proofs stored. Cashu wallet is empty." };
         }
 
         const summary = {
@@ -269,39 +155,19 @@ export function registerCashuTools(server: McpServer): void {
         };
 
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  ...summary,
-                  unspentBalance: `${summary.unspentBalance.toLocaleString()} sats`,
-                  message:
-                    summary.spent > 0
-                      ? `Removed ${summary.spent} spent proof(s) from wallet.`
-                      : "All proofs are valid.",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          ...summary,
+          unspentBalance: `${summary.unspentBalance.toLocaleString()} sats`,
+          message:
+            summary.spent > 0
+              ? `Removed ${summary.spent} spent proof(s) from wallet.`
+              : "All proofs are valid.",
         };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Check failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- cashu_create_invoice ----
+  // SPECIAL CASE: Returns mixed content (text + image), so we use
+  // jsonResponse/errorResponse manually instead of withErrorHandler.
   server.tool(
     "cashu_create_invoice",
     "Create a Lightning invoice to top up your Cashu wallet. " +
@@ -346,15 +212,7 @@ export function registerCashuTools(server: McpServer): void {
           ],
         };
       } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Invoice creation failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResponse(`Invoice creation failed: ${(err as Error).message}`);
       }
     },
   );
@@ -369,65 +227,30 @@ export function registerCashuTools(server: McpServer): void {
       quoteId: z.string().describe("The quote ID returned by cashu_create_invoice"),
       amount: z.number().positive().describe("The amount in sats (same as cashu_create_invoice)"),
     },
-    async ({ quoteId, amount }) => {
-      try {
+    async ({ quoteId, amount }) =>
+      withErrorHandler(async () => {
         const result = await claimMintInvoice(quoteId, amount);
-        const formatSats = (n: number) =>
-          `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
 
         if (!result.claimed) {
           return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  {
-                    success: false,
-                    quoteId: result.quoteId,
-                    state: result.state,
-                    message:
-                      result.state === "UNPAID"
-                        ? "Invoice not yet paid. Please pay the Lightning invoice and try again."
-                        : `Unexpected state: ${result.state}`,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
+            success: false,
+            quoteId: result.quoteId,
+            state: result.state,
+            message:
+              result.state === "UNPAID"
+                ? "Invoice not yet paid. Please pay the Lightning invoice and try again."
+                : `Unexpected state: ${result.state}`,
           };
         }
 
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  quoteId: result.quoteId,
-                  state: result.state,
-                  amount: formatSats(result.amount),
-                  message: "Ecash claimed and added to your Cashu wallet!",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          success: true,
+          quoteId: result.quoteId,
+          state: result.state,
+          amount: formatSats(result.amount),
+          message: "Ecash claimed and added to your Cashu wallet!",
         };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Claim failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 
   // ---- cashu_get_mint_info ----
@@ -435,28 +258,9 @@ export function registerCashuTools(server: McpServer): void {
     "cashu_get_mint_info",
     "Get information about the configured Cashu mint (name, version, supported NUTs, etc.).",
     {},
-    async () => {
-      try {
-        const info = await getMintInfo();
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(info, null, 2),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Error: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+    async () =>
+      withErrorHandler(async () => {
+        return await getMintInfo();
+      }),
   );
 }

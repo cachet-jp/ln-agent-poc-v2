@@ -11,6 +11,7 @@ if (!("EventSource" in globalThis)) {
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { getConfig } from "./lib/config.js";
+import { logger } from "./lib/logger.js";
 
 const server = new McpServer({
   name: "purchasing-agent",
@@ -43,7 +44,7 @@ try {
   const { registerArkTools } = await import("./tools/ark-wallet.js");
   registerArkTools(server);
 } catch (err) {
-  console.error(`[purchasing-agent] Ark tools unavailable (Cashu-only mode): ${(err as Error).message}`);
+  logger.info("Ark tools unavailable (Cashu-only mode)", { error: (err as Error).message });
 }
 
 // Bitrefill tools — search/detail always available; purchase tools require API credentials
@@ -60,7 +61,7 @@ if (config.AMAZON_EMAIL && config.AMAZON_PASSWORD) {
     registerAmazonTools(server);
     registerAmazonSetupTools(server);
   } catch (err) {
-    console.error(`[purchasing-agent] Amazon tools unavailable: ${(err as Error).message}`);
+    logger.warn("Amazon tools unavailable", { error: (err as Error).message });
   }
 }
 
@@ -70,7 +71,7 @@ if (config.DMM_EMAIL && config.DMM_PASSWORD) {
     const { registerDmmTools } = await import("./tools/dmm.js");
     registerDmmTools(server);
   } catch (err) {
-    console.error(`[purchasing-agent] DMM tools unavailable: ${(err as Error).message}`);
+    logger.warn("DMM tools unavailable", { error: (err as Error).message });
   }
 }
 
@@ -80,7 +81,7 @@ if (config.DLSITE_EMAIL && config.DLSITE_PASSWORD) {
     const { registerDlsiteTools } = await import("./tools/dlsite.js");
     registerDlsiteTools(server);
   } catch (err) {
-    console.error(`[purchasing-agent] DLsite tools unavailable: ${(err as Error).message}`);
+    logger.warn("DLsite tools unavailable", { error: (err as Error).message });
   }
 }
 

@@ -1,0 +1,9 @@
+# === S3 Backend Configuration ===
+# Copy this file and customize:
+#   cp backend.hcl.example backend.hcl
+#
+# Then initialize:
+#   terraform init -backend-config=backend.hcl
+
+bucket  = "<YOUR_TFSTATE_BUCKET>"
+profile = "<YOUR_AWS_PROFILE>"

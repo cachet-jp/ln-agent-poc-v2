@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { newPage, humanDelay } from "../lib/browser.js";
+import { withPage, humanDelay } from "../lib/browser.js";
 import { payBolt11 } from "../lib/payment-strategy.js";
 import { getConfig } from "../lib/config.js";
 import type {
@@ -91,11 +91,8 @@ export async function buyGiftCard(
   }
 
   const productUrl = `${USEBITCOIN_BASE}/ja/products/${catalog.slug}/${catalog.skuPrefix}-${amount}`;
-  let page;
 
-  try {
-    page = await newPage();
-
+  return withPage(async (page) => {
     // 1. Navigate to product page
     await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await humanDelay();
@@ -155,8 +152,6 @@ export async function buyGiftCard(
     const orderMatch = page.url().match(/\/orders\/([^/?]+)/);
     const orderId = orderMatch?.[1] ?? "unknown";
 
-    await page.context().close();
-
     return {
       product,
       code: giftData.code,
@@ -168,16 +163,7 @@ export async function buyGiftCard(
       satsPaid: payResult.amount,
       fee: payResult.fee,
     };
-  } catch (err) {
-    if (page) {
-      try {
-        await page.context().close();
-      } catch {
-        // ignore cleanup errors
-      }
-    }
-    throw err;
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------

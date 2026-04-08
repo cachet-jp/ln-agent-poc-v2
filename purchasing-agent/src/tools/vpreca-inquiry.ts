@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { newPage, humanDelay, humanType } from "../lib/browser.js";
+import { withPage, humanDelay, humanType } from "../lib/browser.js";
+import { withErrorHandler } from "../lib/tool-helpers.js";
 import type { VPrecaCardDetails } from "../types.js";
 
 const VPRECA_INQUIRY_URL =
@@ -14,11 +15,7 @@ export async function inquireVPrecaCard(
   giftCode: string,
   cardLast4: string,
 ): Promise<VPrecaCardDetails> {
-  let page;
-
-  try {
-    page = await newPage();
-
+  return withPage(async (page) => {
     // 1. Navigate to terms agreement page
     await page.goto(VPRECA_INQUIRY_URL, {
       waitUntil: "domcontentloaded",
@@ -27,7 +24,6 @@ export async function inquireVPrecaCard(
     await humanDelay();
 
     // 2. Click the terms link to enable the checkbox (js-confirmed-agree-activation)
-    //    Clicking the link opens a popup; once opened the checkbox becomes enabled.
     const termsLink = page.locator(".js-confirmed-agree-activation__trigger").first();
     if (await termsLink.isVisible({ timeout: 5000 }).catch(() => false)) {
       const [popup] = await Promise.all([
@@ -47,7 +43,6 @@ export async function inquireVPrecaCard(
       if (cb) {
         cb.disabled = false;
         cb.checked = true;
-        // Trigger change event so any JS listeners fire
         cb.dispatchEvent(new Event("change", { bubbles: true }));
         cb.dispatchEvent(new Event("click", { bubbles: true }));
       }
@@ -81,20 +76,8 @@ export async function inquireVPrecaCard(
     await humanDelay(2000, 3000);
 
     // 8. Extract card details
-    const details = await extractCardDetails(page);
-
-    await page.context().close();
-    return details;
-  } catch (err) {
-    if (page) {
-      try {
-        await page.context().close();
-      } catch {
-        // ignore cleanup errors
-      }
-    }
-    throw err;
-  }
+    return extractCardDetails(page);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -114,40 +97,18 @@ export function registerVPrecaInquiryTools(server: McpServer): void {
         .string()
         .describe("カード番号下4桁（UseBitcoin購入時に取得、数字4桁）"),
     },
-    async ({ giftCode, cardLast4 }) => {
-      try {
+    async ({ giftCode, cardLast4 }) =>
+      withErrorHandler(async () => {
         const result = await inquireVPrecaCard(giftCode, cardLast4);
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  cardNumber: result.cardNumber,
-                  expiryDate: result.expiryDate,
-                  securityCode: result.securityCode,
-                  balance: result.balance,
-                  cardName: result.cardName ?? null,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
+          success: true,
+          cardNumber: result.cardNumber,
+          expiryDate: result.expiryDate,
+          securityCode: result.securityCode,
+          balance: result.balance,
+          cardName: result.cardName ?? null,
         };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `V-Preca inquiry failed: ${(err as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      }),
   );
 }
 
