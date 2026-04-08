@@ -37,8 +37,8 @@ resource "aws_instance" "ln_agent" {
   root_block_device {
     volume_size = var.ebs_size_gb
     volume_type = "gp3"
-    iops        = 3000     # gp3 default, bump during IBD if needed
-    throughput  = 250      # MB/s, bump during IBD if needed
+    iops        = 3000 # gp3 default, bump during IBD if needed
+    throughput  = 250  # MB/s, bump during IBD if needed
     encrypted   = true
   }
 
