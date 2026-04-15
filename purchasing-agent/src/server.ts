@@ -85,6 +85,12 @@ if (config.DLSITE_EMAIL && config.DLSITE_PASSWORD) {
   }
 }
 
+// Movie ticket booker — TOHO Cinemas seat selection & booking via Playwright
+{
+  const { registerMovieTicketBookerTools } = await import("./tools/movie-ticket-booker.js");
+  registerMovieTicketBookerTools(server);
+}
+
 // Start server with stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
