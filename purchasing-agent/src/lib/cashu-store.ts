@@ -6,7 +6,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, createHash, hkdfSync } from "node:crypto";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -125,7 +125,17 @@ async function writeStore(data: StoreData[]): Promise<void> {
   await ensureDataDir();
   const plaintext = JSON.stringify(data, null, 2);
   const payload = encrypt(plaintext);
-  await writeFile(STORE_FILE, JSON.stringify(payload), { mode: 0o600 });
+  // Atomic write: stage to tmp then rename. POSIX rename is atomic on the same
+  // filesystem, so readers either see the old store or the new store — never a
+  // half-written file. Proofs are bearer assets, so store corruption = asset loss.
+  const tmpFile = `${STORE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await writeFile(tmpFile, JSON.stringify(payload), { mode: 0o600 });
+    await rename(tmpFile, STORE_FILE);
+  } catch (err) {
+    await unlink(tmpFile).catch(() => {});
+    throw err;
+  }
 }
 
 function findOrCreate(data: StoreData[], mintUrl: string): StoreData {
