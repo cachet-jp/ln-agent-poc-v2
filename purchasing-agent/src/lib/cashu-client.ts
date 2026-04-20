@@ -278,8 +278,11 @@ export async function receiveTokens(encodedToken: string): Promise<ReceiveResult
     );
   }
 
-  // Swap with mint for fresh proofs
-  const newProofs = await wallet.receive(encodedToken);
+  // Swap with mint for fresh proofs. requireDleq asks the mint for DLEQ
+  // proofs alongside blind signatures and rejects the token if any are
+  // missing or invalid — catches tampered / malformed tokens before they
+  // enter our store.
+  const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
 
   // Store fresh proofs
   await addProofs(mintUrl, newProofs);
@@ -292,6 +295,16 @@ export async function receiveTokens(encodedToken: string): Promise<ReceiveResult
 
 /**
  * Create a Cashu token string to send to someone.
+ *
+ * Self-swap verification: after wallet.send() produces the send proofs,
+ * we round-trip them through the mint via wallet.receive() to confirm
+ * the blind signatures are valid. Without this, a malformed proof is
+ * only detected by the recipient at spend time — and by then our
+ * original inputs are already burned at the mint. See the tender-elgamal
+ * 2026-04-02 incident: 1,573 sats were lost to exactly this path.
+ *
+ * Trade-off: one extra mint round-trip and a potential extra swap fee
+ * (typically 0-few sats). Cheap insurance against proof loss.
  */
 export async function sendTokens(amountSats: number): Promise<SendResult> {
   const mintUrl = getMintUrl();
@@ -306,19 +319,39 @@ export async function sendTokens(amountSats: number): Promise<SendResult> {
   }
 
   // Split proofs: keep + send
-  const { send: sendProofs, keep: keepProofs } = await wallet.send(amountSats, allProofs, {
-    includeFees: true,
-  });
+  const { send: sendProofs, keep: keepProofs } = await wallet.send(
+    amountSats,
+    allProofs,
+    { includeFees: true },
+  );
 
-  // Encode send proofs as a Cashu token string
-  const token = getEncodedToken({ mint: mintUrl, proofs: sendProofs });
+  // Self-swap: re-spend sendProofs against the mint to get verified replacement
+  // proofs. If any blind signature is malformed, this throws here (before
+  // the token reaches the recipient).
+  const unverifiedToken = getEncodedToken({ mint: mintUrl, proofs: sendProofs });
+  let verifiedProofs: Proof[];
+  try {
+    verifiedProofs = await wallet.receive(unverifiedToken);
+  } catch (err) {
+    // sendProofs are broken. Persist keepProofs so we don't compound the
+    // loss by also dropping the change.
+    await saveProofs(mintUrl, keepProofs);
+    const burnedAmount = sendProofs.reduce((sum, p) => sum + p.amount, 0);
+    throw new Error(
+      `Cashu send failed self-swap verification: ${(err as Error).message}. ` +
+        `${burnedAmount} sats may be stranded at the mint.`,
+    );
+  }
 
-  // Update store: keep only the remaining proofs
+  const token = getEncodedToken({ mint: mintUrl, proofs: verifiedProofs });
+
+  // Update store: keep only the remaining proofs (sendProofs are SPENT at
+  // the mint; verifiedProofs leave with the recipient).
   await saveProofs(mintUrl, keepProofs);
 
   return {
     token,
-    amount: sendProofs.reduce((sum, p) => sum + p.amount, 0),
+    amount: verifiedProofs.reduce((sum, p) => sum + p.amount, 0),
   };
 }
 
