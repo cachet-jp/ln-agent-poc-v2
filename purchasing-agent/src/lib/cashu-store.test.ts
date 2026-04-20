@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { randomBytes, hkdfSync } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Proof } from "@cashu/cashu-ts";
 
 // ---------------------------------------------------------------------------
@@ -23,6 +23,9 @@ vi.mock("dotenv", () => ({ config: () => {} }));
 let _tmpDir: string;
 let _storeKey: string;
 let _sessionToken: string | undefined;
+// Failure injection hooks for atomic-write tests
+let _failTmpWrite = false;
+let _failRename = false;
 
 vi.mock("./cashu-config.js", () => ({
   getCashuConfig: () => ({
@@ -42,22 +45,37 @@ const originalExistsSync = vi.fn();
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = (await importOriginal()) as typeof import("node:fs/promises");
+  const redirect = (p: string) =>
+    p.includes("cashu-proofs.enc.json") ? join(_tmpDir, basename(p)) : p;
   return {
     ...actual,
     readFile: (...args: Parameters<typeof actual.readFile>) => {
       const p = args[0] as string;
-      if (typeof p === "string" && p.includes("cashu-proofs.enc.json")) {
-        const redirected = join(_tmpDir, "cashu-proofs.enc.json");
-        return actual.readFile(redirected, args[1] as BufferEncoding);
+      if (typeof p === "string") {
+        return actual.readFile(redirect(p), args[1] as BufferEncoding);
       }
       return actual.readFile(...args);
     },
     writeFile: (path: string, data: string, opts?: object) => {
       if (typeof path === "string" && path.includes("cashu-proofs.enc.json")) {
-        const redirected = join(_tmpDir, "cashu-proofs.enc.json");
-        return actual.writeFile(redirected, data, opts);
+        if (_failTmpWrite && path.endsWith(".tmp")) {
+          return Promise.reject(new Error("simulated tmp write failure"));
+        }
+        return actual.writeFile(redirect(path), data, opts);
       }
       return actual.writeFile(path, data, opts);
+    },
+    rename: (src: string, dst: string) => {
+      if (_failRename && typeof src === "string" && src.includes("cashu-proofs.enc.json")) {
+        return Promise.reject(new Error("simulated rename failure"));
+      }
+      const s = typeof src === "string" ? redirect(src) : src;
+      const d = typeof dst === "string" ? redirect(dst) : dst;
+      return actual.rename(s, d);
+    },
+    unlink: (path: string) => {
+      const p = typeof path === "string" ? redirect(path) : path;
+      return actual.unlink(p);
     },
     mkdir: (...args: Parameters<typeof actual.mkdir>) => actual.mkdir(...args),
   };
@@ -103,6 +121,8 @@ describe("cashu-store", () => {
     vi.resetModules();
     _storeKey = generateHexKey();
     _sessionToken = undefined;
+    _failTmpWrite = false;
+    _failRename = false;
     _tmpDir = await mkdtemp(join(tmpdir(), "cashu-store-test-"));
   });
 
@@ -318,16 +338,7 @@ describe("cashu-store", () => {
     });
 
     it("throws for invalid CASHU_STORE_KEY length", async () => {
-      _storeKey = "aabb"; // too short — only 2 bytes
-      // Override the mock to return this short key
-      vi.doMock("./cashu-config.js", () => ({
-        getCashuConfig: () => ({
-          CASHU_MINT_URL: "https://mint.test",
-          CASHU_STORE_KEY: "aabb",
-          CASHU_MAX_BALANCE_SATS: 1_000_000,
-          CASHU_PREFERRED: true,
-        }),
-      }));
+      _storeKey = "aabb"; // too short — only 2 bytes (top-level mock reads _storeKey)
 
       const { addProofs } = await import("./cashu-store.js");
       const mint = "https://mint.test";
@@ -358,6 +369,65 @@ describe("cashu-store", () => {
       expect(loaded).toHaveLength(1);
       expect(loaded[0].amount).toBe(50);
       expect(loaded[0].secret).toBe("new1");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Atomic write crash safety (regression test for tender-elgamal 2026-04-02
+  // incident: proof store must not be corruptible by a mid-write crash.)
+  // -------------------------------------------------------------------------
+
+  describe("atomic write crash safety", () => {
+    it("preserves previous store when tmp file write fails", async () => {
+      const { addProofs, saveProofs, loadProofs } = await import("./cashu-store.js");
+      const mint = "https://mint.test";
+
+      await addProofs(mint, [makeProof({ amount: 777, secret: "original" })]);
+
+      _failTmpWrite = true;
+      await expect(
+        saveProofs(mint, [makeProof({ amount: 999, secret: "corrupted" })]),
+      ).rejects.toThrow(/simulated tmp write failure/);
+      _failTmpWrite = false;
+
+      const loaded = await loadProofs(mint);
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0].secret).toBe("original");
+      expect(loaded[0].amount).toBe(777);
+    });
+
+    it("preserves previous store when rename fails", async () => {
+      const { addProofs, saveProofs, loadProofs } = await import("./cashu-store.js");
+      const mint = "https://mint.test";
+
+      await addProofs(mint, [makeProof({ amount: 500, secret: "before-fail" })]);
+
+      _failRename = true;
+      await expect(
+        saveProofs(mint, [makeProof({ amount: 1, secret: "never-saved" })]),
+      ).rejects.toThrow(/simulated rename failure/);
+      _failRename = false;
+
+      const loaded = await loadProofs(mint);
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0].secret).toBe("before-fail");
+      expect(loaded[0].amount).toBe(500);
+    });
+
+    it("cleans up tmp files when rename fails", async () => {
+      const { addProofs, saveProofs } = await import("./cashu-store.js");
+      const mint = "https://mint.test";
+
+      await addProofs(mint, [makeProof({ amount: 10, secret: "seed" })]);
+
+      _failRename = true;
+      await expect(
+        saveProofs(mint, [makeProof({ amount: 20, secret: "b" })]),
+      ).rejects.toThrow();
+      _failRename = false;
+
+      const files = await readdir(_tmpDir);
+      expect(files.filter((f) => f.endsWith(".tmp"))).toHaveLength(0);
     });
   });
 });
