@@ -1,77 +1,57 @@
-# Contributing to LN Agent PoC
+# Contributing
 
-## Development Setup
-
-### Prerequisites
+## Prerequisites
 
 - Node.js 20+
-- pnpm
-- Docker & Docker Compose
-- Terraform >= 1.5
-- AWS CLI (configured with SSO)
+- pnpm 9+
+- Git (submodules required for Ark / claw-cash support — optional at runtime but expected in development)
 
-### Local Development
+## Setup
 
 ```bash
-# Clone and install
-git clone https://github.com/cachet-jp/ln-agent-poc.git
-cd ln-agent-poc/purchasing-agent
+git clone --recurse-submodules https://github.com/cachet-jp/ln-agent-poc-v2.git
+cd ln-agent-poc-v2/purchasing-agent
 pnpm install
-
-# Copy environment template
-cp .env.example .env
-# Edit .env with your values
-
-# Run tests
-pnpm test
-
-# Type check
-pnpm tsc --noEmit
+npx playwright install chromium   # Amazon / DMM / DLsite の browser automation
+cp .env.example .env               # Fill in USEBITCOIN_API_KEY, CASHU_MINT_URL, CASHU_STORE_KEY
 ```
 
-### Infrastructure (AWS)
+If you cloned without `--recurse-submodules`:
 
 ```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-cp backend.hcl.example backend.hcl
-# Edit both files with your values
-
-terraform init -backend-config=backend.hcl
-terraform plan -out=tfplan
-terraform apply tfplan
+git submodule update --init --recursive
 ```
 
-## Adding a New MCP Tool
-
-1. Create `purchasing-agent/src/tools/<vendor>.ts`
-2. Use `tool-helpers.ts` for response formatting:
-   ```typescript
-   import { jsonResponse, errorResponse, withErrorHandler } from "../lib/tool-helpers.js";
-   ```
-3. Register tools in `server.ts`
-4. Add tests in `purchasing-agent/src/tools/<vendor>.test.ts`
-5. Update `purchasing-agent/.env.example` if new env vars are needed
-
-## Git Workflow
-
-- Create feature branches from `main`
-- Use conventional commit messages (e.g., `feat:`, `fix:`, `refactor:`)
-- PR to `main` with description and test plan
-
-## Testing
+## Workflow
 
 ```bash
 cd purchasing-agent
-pnpm test              # Run all tests
-pnpm test -- --watch   # Watch mode
-pnpm test -- <file>    # Run specific test
+pnpm run lint     # tsc --noEmit
+pnpm test         # vitest
+pnpm dev          # tsx watch mode
 ```
+
+Create a feature branch from `main`, use conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `chore:`), and open a PR with a short summary + test plan.
+
+## Adding a New MCP Tool
+
+1. Create `src/tools/<vendor>.ts`.
+2. Keep the tool definition thin: validate with zod, delegate to a `lib/` helper for the real work.
+3. Register the tool inside `registerXxxTools(server)` and call it from `src/server.ts`.
+4. If the tool has a persistent state boundary (wallet, browser session, HTTP client), put the boundary in `src/lib/`, not inside the tool file.
+5. Document new env vars in both `src/lib/config.ts` (zod schema) and `.env.example`.
+6. Add tests under `src/**/*.test.ts`. Mock the network boundary — don't mock the wallet abstractions.
 
 ## Code Style
 
-- TypeScript strict mode
-- Zod for runtime validation
-- No `any` types
-- Prefer `withPage()` for browser automation (automatic cleanup)
-- Use `withErrorHandler()` in MCP tool handlers
+- TypeScript strict mode, no `any`.
+- Zod for all runtime input validation (MCP tool params, env config).
+- Use `withPage()` for Playwright automation — it handles context cleanup.
+- `src/lib/tool-helpers.ts` provides `jsonResponse` / `errorResponse` / `withErrorHandler`; prefer them for new tools. Existing tools (e.g. `usebitcoin.ts`) keep per-tool error prefixes and don't use the helper — stay consistent with the file you're editing.
+- Comments: only WHY, not WHAT. Non-obvious invariants, workarounds, and constraints are worth documenting; code narration is not.
+
+## Security
+
+- Never commit secrets. Run `gitleaks` locally before pushing when adding new env vars.
+- Do not log gift codes, preimages, or session tokens. Error messages must not `JSON.stringify` a fulfilled-order payload.
+- MCP tools that move real money must validate against a spend guardrail (`MAX_SPEND_JPY` or `CASHU_MAX_BALANCE_SATS`).
