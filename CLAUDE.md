@@ -1,138 +1,53 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
-## Project Overview
+## Project
 
-Bitcoin Lightning Network node management agent PoC. Deploys LND + Bitcoin Core + OpenClaw on AWS, enabling AI-driven Lightning channel management via MCP (Model Context Protocol).
+Bitcoin Lightning 決済で商品を購入する MCP エージェント。主要コンポーネントは `purchasing-agent/` ディレクトリに全て入っています。
 
-**Stack**: Terraform (AWS IaC), Docker Compose (Bitcoin Core v27 + LND v0.18 + OpenClaw), Bash scripts
+**Stack**: TypeScript (Node 20+), pnpm, MCP SDK (`@modelcontextprotocol/sdk`), `@cashu/cashu-ts`, `@arkade-os/sdk` (via `claw-cash` submodule), Playwright (Amazon / DMM / DLsite の自動化のみ), `zod`, `vitest`.
+
+## Layout
+
+- `purchasing-agent/` — MCP サーバー本体。ツール実装・ウォレット連携・ブラウザ自動化すべて。
+- `claw-cash/` — Ark ウォレット SDK の git submodule。purchasing-agent から `link:` で参照。
+- `.claude/commands/` — Claude Code の slash-command SKILL。`/cashu-purchase` `/auto-purchase` `/cashu-manage` `/bitrefill-purchase` `/vpreca-inquiry`。
 
 ## Common Commands
 
-### AWS Infrastructure (run from local machine)
 ```bash
-# Deploy infrastructure
-cd terraform && terraform init && terraform plan -out=tfplan && terraform apply tfplan
-
-# Get EC2 public IP
-terraform output -raw public_ip
-
-# SSH to EC2
-ssh -i ~/.ssh/ln-agent-poc ubuntu@$(terraform output -raw public_ip)
+cd purchasing-agent
+pnpm install
+pnpm run lint     # tsc --noEmit
+pnpm test         # vitest run
+pnpm dev          # tsx src/server.ts (MCP stdio server)
 ```
 
-### EC2 Node Operations (run on EC2)
-```bash
-# Start full stack
-docker-compose up -d
+## Architecture Notes
 
-# Check Bitcoin sync progress
-docker exec bitcoind-mainnet bitcoin-cli -rpcuser=bitcoinrpc -rpcpassword='<pass>' getblockchaininfo
-
-# LND operations
-docker exec lnd-mainnet lncli getinfo
-docker exec lnd-mainnet lncli walletbalance
-docker exec lnd-mainnet lncli listchannels
-docker exec lnd-mainnet lncli newaddress p2tr
-
-# View logs
-docker logs -f bitcoind-mainnet
-docker logs -f lnd-mainnet
-docker logs -f openclaw-agent
-```
-
-## Architecture
-
-```
-Local Machine                      AWS (ap-northeast-1)
-┌──────────────────┐              ┌─────────────────────────────────────────┐
-│ Claude Desktop   │◄─────────────│  EC2 t3.large (Ubuntu 22.04)            │
-│ + OpenClaw MCP   │   gRPC/REST  │  ┌─────────────────────────────────┐    │
-└──────────────────┘              │  │ Docker Compose                   │    │
-                                  │  │ ┌───────────┐  ┌───────────────┐│    │
-                                  │  │ │ Bitcoin   │  │ LND           ││    │
-                                  │  │ │ Core      │◄─│ v0.18         ││    │
-                                  │  │ │ (txindex) │  │ (mainnet)     ││    │
-                                  │  │ └───────────┘  └───────┬───────┘│    │
-                                  │  │                        │        │    │
-                                  │  │               ┌────────▼───────┐│    │
-                                  │  │               │ OpenClaw Agent ││    │
-                                  │  │               │ (LN MCP tools) ││    │
-                                  │  │               └────────────────┘│    │
-                                  │  └─────────────────────────────────┘    │
-                                  │  750GB gp3 EBS (encrypted)              │
-                                  └─────────────────────────────────────────┘
-```
-
-**Data flow**: Claude Desktop → OpenClaw MCP → LND gRPC → Bitcoin Core RPC
-
-## Mainnet Safety Guardrails
-
-Configured in `docker/openclaw-config/agent.yaml`:
-- Single payment limit: 50,000 sats
-- Daily spend limit: 200,000 sats
-- Channel size limit: 1,000,000 sats
-- Max channels per day: 2
-- Force-close: requires human approval
+- **Payment strategy layer** (`src/lib/payment-strategy.ts`) abstracts `payBolt11(bolt11)` across Cashu and Ark. Tools should never call Cashu / Ark directly.
+- **Tool files** (`src/tools/*.ts`) only register MCP tools and delegate to `lib/` helpers.
+- **Config** (`src/lib/config.ts`) uses zod; all env vars documented in `.env.example`. Add new vars both places.
+- **Spend guardrails**: `MAX_SPEND_JPY` for gift-card purchases, `CASHU_MAX_BALANCE_SATS` for ecash minting. Never bypass these.
+- **UseBitcoin** uses the REST API (`src/lib/usebitcoin-api.ts`), not browser automation. Amazon / DMM / DLsite still use Playwright.
+- **Claw-cash (Ark)** is imported lazily. Code must work in Cashu-only mode where `claw-cash/` is absent or unbuilt.
 
 ## Key Constraints
 
-- Bitcoin Core IBD takes 1-3 days on gp3 750GB
-- LND requires full chain data (txindex=1), no pruning
-- OpenClaw binds to localhost by default; external access needs config changes
-- AWS profile: configured via `var.aws_profile` in Terraform
-- tfstate stored in S3 (configured via `-backend-config`)
+- Secrets live in `.env`, never committed. `.env.example` is the canonical list.
+- MCP responses: use `src/lib/tool-helpers.ts` helpers (`jsonResponse`, `errorResponse`, `withErrorHandler`) when feasible; existing UseBitcoin tools keep per-tool prefixes so they don't use the helper.
+- Playwright sessions are saved under `purchasing-agent/storage-state/` and are user-private — never commit.
+- On a fulfilled purchase, **do not log the gift code or redeem URL**. Errors should not `JSON.stringify(order)` when the payload can contain a code.
 
----
+## Testing
 
-## Phase 0: Initial Setup Rules
+- `pnpm test` runs the full vitest suite. Some tests depend on `claw-cash` being initialized — they fail with `ERR_MODULE_NOT_FOUND` when the submodule is missing. Treat those failures as expected in Cashu-only environments.
+- When adding a tool, prefer mocking the network boundary (fetch, MCP) rather than mocking the wallet layer.
 
-### Goals
-1. **OpenClaw configuration** - Set up and configure OpenClaw agent with LND MCP tools
-2. **Claude CLI access** - Enable `claude` command (agent) to login and work via CLI
-3. **Chat tool integration** - Enable Bitcoin/Lightning operations via chat interface (minimum: start blockchain sync)
-4. **Status skill** - Create skill to check current work status (Bitcoin sync, LND, OpenClaw health)
+## Coding Conventions
 
-### Phase 0 Workflow
-
-```
-Local (Claude Code)              EC2 (ln-agent)
-┌─────────────────┐             ┌──────────────────────────────┐
-│ claude command  │────SSH──────│ OpenClaw Agent               │
-│ (MCP client)    │             │ ├── Bitcoin Core sync status │
-└─────────────────┘             │ ├── LND wallet/channel ops   │
-                                │ └── Health monitoring        │
-                                └──────────────────────────────┘
-```
-
-### Status Check Commands
-
-```bash
-# Quick status (run on EC2)
-~/ln-agent/scripts/03-verify-stack.sh
-
-# Bitcoin sync progress
-docker exec bitcoind-mainnet bitcoin-cli getblockchaininfo | jq '{chain, blocks, headers, progress: .verificationprogress}'
-
-# LND status
-docker exec lnd-mainnet lncli getinfo | jq '{synced_to_chain, synced_to_graph, block_height, num_active_channels}'
-
-# OpenClaw health
-curl -s http://localhost:8081/health
-```
-
-### Interactive Work Documentation
-
-When work requires interactive steps (e.g., `.env` configuration, wallet creation):
-1. Complete all automated work first
-2. Document remaining steps in Notion (private page with full details)
-3. Create GitHub issues for each section with sub-issues
-4. Mask sensitive info in GitHub issues (use `xxxx` for API keys, passwords)
-5. Link GitHub issues from Notion documentation
-
-### Git Workflow
-
-- Feature branch: `bump/kohei/initial-setup` (from main)
-- Close relevant GitHub issues when work is completed
-- PR to main when Phase 0 is complete
+- No comments narrating WHAT the code does. Keep only non-obvious WHY (e.g. bech32 uppercase for QR alphanumeric mode).
+- Prefer editing existing files over adding new ones.
+- One zod schema per MCP tool parameter set. Keep them close to the tool definition.
+- Return raw `fields[]` from fulfilled orders so callers can render labels; the "primary / secondary code" abstraction is a convenience, not a contract.
