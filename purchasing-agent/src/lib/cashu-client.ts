@@ -18,6 +18,7 @@ import {
   type ProofState,
 } from "@cashu/cashu-ts";
 import { getCashuConfig } from "./cashu-config.js";
+import { renderBolt11Qr } from "./qr.js";
 import {
   loadProofs,
   addProofs,
@@ -419,14 +420,7 @@ export async function createMintInvoice(amountSats: number): Promise<MintInvoice
   // Request mint quote — mint returns a Lightning invoice
   const mintQuote = await wallet.createMintQuoteBolt11(amountSats);
 
-  // Generate QR code from bolt11 invoice
-  const QRCode = await import("qrcode");
-  const qrDataUrl = await QRCode.toDataURL(mintQuote.request.toUpperCase(), {
-    type: "image/png",
-    width: 400,
-    margin: 2,
-    errorCorrectionLevel: "M",
-  });
+  const { dataUrl: qrDataUrl } = await renderBolt11Qr(mintQuote.request, { width: 400 });
 
   return {
     quoteId: mintQuote.quote,
