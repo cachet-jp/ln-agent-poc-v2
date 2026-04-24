@@ -1,4 +1,4 @@
-# Purchasing Agent
+# Purchasing Agent Skill Sets
 
 Bitcoin でギフトカード・eSIM・モバイルトップアップ・デジタルコンテンツを購入する MCP サーバーとスキル。
 
