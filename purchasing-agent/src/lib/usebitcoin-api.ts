@@ -154,27 +154,30 @@ export async function pollOrderUntilComplete(
 
 /**
  * Extract the primary and (optional) secondary gift-code values from a
- * fulfilled order. The API returns codes under `codes[].fields[]` as
- * `{ key, label, value }` triples — the `code` key is the primary code and
- * any additional fields (e.g. V-Preca's card_last4, redemption PIN) become
- * the secondary code.
+ * fulfilled order. The API returns codes under `codes[].fields[]` as ordered
+ * `{ key, label, value }` triples — the first field is the primary redeemable
+ * value, any additional fields (e.g. V-Preca's card_last_4, a redemption PIN)
+ * become the secondary code. Keys are product-specific (`gift_code`,
+ * `hiragana_id`, `code`, …), so we trust ordering rather than key matching.
  */
-export function extractCodesFromOrder(
-  order: OrderStatusResponse,
-): { code: string; secondaryCode?: string; redeemUrl?: string } {
+export function extractCodesFromOrder(order: OrderStatusResponse): {
+  code: string;
+  secondaryCode?: string;
+  redeemUrl?: string;
+  fields: OrderField[];
+} {
   const first = order.codes?.[0];
   if (!first) {
-    throw new Error(
-      `UseBitcoin order fulfilled but no codes returned: ${JSON.stringify(order)}`,
-    );
+    throw new Error("UseBitcoin order fulfilled but no codes returned");
   }
-  const primary =
-    first.fields.find((f) => f.key === "code")?.value ?? first.fields[0]?.value;
+  const primary = first.fields[0]?.value;
   if (!primary) {
-    throw new Error(
-      `UseBitcoin order fulfilled but code field is empty: ${JSON.stringify(first)}`,
-    );
+    throw new Error("UseBitcoin order fulfilled but primary code field is empty");
   }
-  const secondary = first.fields.find((f) => f.key !== "code" && f.value)?.value;
-  return { code: primary, secondaryCode: secondary, redeemUrl: first.redeem_url };
+  return {
+    code: primary,
+    secondaryCode: first.fields[1]?.value,
+    redeemUrl: first.redeem_url,
+    fields: first.fields,
+  };
 }
