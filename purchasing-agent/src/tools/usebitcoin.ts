@@ -6,7 +6,6 @@ import {
   createInvoice,
   pollOrderUntilComplete,
   extractCodesFromOrder,
-  SUCCESS_STATUSES,
 } from "../lib/usebitcoin-api.js";
 import type {
   UseBitcoinProduct,
@@ -93,21 +92,13 @@ export async function buyGiftCard(
   }
 
   const order = await pollOrderUntilComplete(invoice.order_id);
-  if (!SUCCESS_STATUSES.has(order.status)) {
+  if (order.status !== "fulfilled") {
     throw new Error(
-      `UseBitcoin order ${invoice.order_id} finished with non-success status "${order.status}". Raw: ${JSON.stringify(order)}`,
+      `UseBitcoin order ${invoice.order_id} ended with status "${order.status}" (expected "fulfilled"). Raw: ${JSON.stringify(order)}`,
     );
   }
 
   const { code, secondaryCode } = extractCodesFromOrder(order);
-
-  // Log the raw settled order: the API's post-payment payload shape is not
-  // yet documented, so we need the first live runs to pin down field names.
-  // stderr is safe — stdio MCP transport uses stdout only.
-  console.error(
-    `[usebitcoin] order ${invoice.order_id} settled (status=${order.status}):`,
-    JSON.stringify(order),
-  );
 
   return {
     product,

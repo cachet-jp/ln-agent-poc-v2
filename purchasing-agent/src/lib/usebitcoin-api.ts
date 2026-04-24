@@ -28,14 +28,32 @@ export interface CreateInvoiceResponse {
   expires_at: string;
 }
 
+export interface OrderField {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface OrderCode {
+  sku: string;
+  redeem_url?: string;
+  product: ApiProduct;
+  fields: OrderField[];
+}
+
 /**
- * Response from `POST /api/v1/orders/{id}`.
- * Known fields: `status`. Remaining fields are undocumented; we keep the raw
- * object so callers can extract codes/URLs defensively.
+ * Response from `POST /api/v1/orders/{id}`. `status` is always one of
+ * `"pending" | "invalid" | "fulfilled"` per api-v1.md; the remaining fields
+ * are only present on `fulfilled`.
  */
-export type OrderStatusResponse = Record<string, unknown> & {
-  status: string;
-};
+export type OrderStatus = "pending" | "invalid" | "fulfilled";
+
+export interface OrderStatusResponse {
+  status: OrderStatus;
+  preimage?: string;
+  total_sats?: number;
+  codes?: OrderCode[];
+}
 
 function baseUrl(): string {
   return getConfig().USEBITCOIN_API_BASE_URL.replace(/\/+$/, "");
@@ -101,16 +119,6 @@ export interface PollOptions {
   intervalMs?: number;
 }
 
-/** Known non-pending order statuses that indicate a successful purchase. */
-export const SUCCESS_STATUSES = new Set([
-  "paid",
-  "completed",
-  "fulfilled",
-  "success",
-  "succeeded",
-  "delivered",
-]);
-
 /**
  * Poll `POST /orders/{id}` until `status !== "pending"` or timeout.
  * Transient HTTP errors are swallowed during polling — the caller has already
@@ -145,59 +153,28 @@ export async function pollOrderUntilComplete(
 }
 
 /**
- * Defensively extract gift-card code strings from an order payload whose exact
- * shape is not yet documented. Returns `{ code, secondaryCode }` where `code`
- * is always a string; if nothing recognizable is found we fall back to the
- * stringified payload so the caller can still surface it to the user.
+ * Extract the primary and (optional) secondary gift-code values from a
+ * fulfilled order. The API returns codes under `codes[].fields[]` as
+ * `{ key, label, value }` triples — the `code` key is the primary code and
+ * any additional fields (e.g. V-Preca's card_last4, redemption PIN) become
+ * the secondary code.
  */
 export function extractCodesFromOrder(
   order: OrderStatusResponse,
-): { code: string; secondaryCode?: string } {
-  const record = order as Record<string, unknown>;
-
-  const firstString = (...keys: string[]): string | undefined => {
-    for (const k of keys) {
-      const v = record[k];
-      if (typeof v === "string" && v.length > 0) return v;
-    }
-    return undefined;
-  };
-
-  const codesArr = Array.isArray(record.codes) ? (record.codes as unknown[]) : null;
-  const arrFirst =
-    codesArr && typeof codesArr[0] === "string" ? (codesArr[0] as string) : undefined;
-  const arrSecond =
-    codesArr && typeof codesArr[1] === "string" ? (codesArr[1] as string) : undefined;
-
-  const primary =
-    firstString("code", "voucher_code", "hiragana_id", "pin_code", "pin", "url") ??
-    arrFirst;
-  const secondary =
-    firstString("card_last4", "secondary_code", "secondaryCode", "card_number_last4") ??
-    arrSecond;
-
-  if (primary) return { code: primary, secondaryCode: secondary };
-
-  // Nested item list (e.g. `{ items: [{ code, pin }] }`)
-  const items = Array.isArray(record.items) ? (record.items as unknown[]) : null;
-  if (items && items.length > 0 && typeof items[0] === "object" && items[0] !== null) {
-    const first = items[0] as Record<string, unknown>;
-    const itemCode =
-      typeof first.code === "string"
-        ? first.code
-        : typeof first.voucher_code === "string"
-          ? first.voucher_code
-          : undefined;
-    const itemSecondary =
-      typeof first.pin === "string"
-        ? first.pin
-        : typeof first.card_last4 === "string"
-          ? first.card_last4
-          : undefined;
-    if (itemCode) return { code: itemCode, secondaryCode: itemSecondary };
+): { code: string; secondaryCode?: string; redeemUrl?: string } {
+  const first = order.codes?.[0];
+  if (!first) {
+    throw new Error(
+      `UseBitcoin order fulfilled but no codes returned: ${JSON.stringify(order)}`,
+    );
   }
-
-  throw new Error(
-    `UseBitcoin order settled but no recognizable gift-code field found in response: ${JSON.stringify(order)}`,
-  );
+  const primary =
+    first.fields.find((f) => f.key === "code")?.value ?? first.fields[0]?.value;
+  if (!primary) {
+    throw new Error(
+      `UseBitcoin order fulfilled but code field is empty: ${JSON.stringify(first)}`,
+    );
+  }
+  const secondary = first.fields.find((f) => f.key !== "code" && f.value)?.value;
+  return { code: primary, secondaryCode: secondary, redeemUrl: first.redeem_url };
 }
