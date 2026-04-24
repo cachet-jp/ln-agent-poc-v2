@@ -31,6 +31,8 @@ Cashu ecash または Ark ウォレットから Lightning 支払いで購入し�
 
 ### UseBitcoin.jp（国内ギフトカード）
 
+UseBitcoin 公式 REST API (`/api/v1/invoices`, `/api/v1/orders/{id}`) 経由で Lightning 決済します。`USEBITCOIN_API_KEY` が必要です。
+
 | 商品 | `product` | 金額 (JPY) | 用途 |
 |------|-----------|-----------|------|
 | Kyash ギフトコード | `kyash` | 500, 1000, 5000, 10000, 50000 | Visa プリペイド（Kyash アプリ） |
@@ -94,7 +96,7 @@ Claude Desktop や Claude Code から MCP ツールとして直接呼び出す�
 git clone https://github.com/cachet-jp/ln-agent-poc.git
 cd ln-agent-poc/purchasing-agent
 pnpm install
-npx playwright install chromium   # 初回のみ（UseBitcoin 購入で必要）
+npx playwright install chromium   # 初回のみ（Amazon / DMM / DLsite 自動化で必要）
 ```
 
 ### A-2. 環境変数
@@ -110,6 +112,9 @@ CASHU_MINT_URL=https://mint.minibits.cash/Bitcoin
 CASHU_STORE_KEY=<64文字の hex>    # 下記コマンドで生成
 MAX_SPEND_JPY=5000
 HEADLESS=true
+
+# UseBitcoin.jp REST API — usebitcoin_buy_* ツール利用時に必須
+USEBITCOIN_API_KEY=<UseBitcoin.jp で発行した API キー>
 ```
 
 > 暗号化キー生成: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
@@ -589,6 +594,9 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 │                                                      │
 │  Bitrefill Client ──── @bitrefill/cli                │
 │  (bitrefill-client.ts)  (MCP API wrapper)            │
+│                                                      │
+│  UseBitcoin API Client (fetch)                       │
+│  (usebitcoin-api.ts)                                 │
 │                                                      │
 │  Amazon / DMM / DLsite  (Playwright 自動化)          │
 │  V-Preca Inquiry  (Lifecard 照会ページ)              │
