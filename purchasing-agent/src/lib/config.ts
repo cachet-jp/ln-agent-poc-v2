@@ -57,6 +57,13 @@ const configSchema = z.object({
   BITREFILL_API_ID: optStr,
   BITREFILL_API_SECRET: optStr,
 
+  // UseBitcoin.jp REST API
+  USEBITCOIN_API_KEY: optStr,
+  USEBITCOIN_API_BASE_URL: z
+    .string()
+    .url()
+    .default("https://usebitcoin.jp/api/v1"),
+
   // Guardrails
   MAX_SPEND_JPY: z.coerce.number().positive().default(5000),
 
