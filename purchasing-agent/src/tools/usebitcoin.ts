@@ -1,16 +1,18 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { withPage, humanDelay } from "../lib/browser.js";
 import { payBolt11 } from "../lib/payment-strategy.js";
 import { getConfig } from "../lib/config.js";
+import {
+  createInvoice,
+  pollOrderUntilComplete,
+  extractCodesFromOrder,
+  SUCCESS_STATUSES,
+} from "../lib/usebitcoin-api.js";
 import type {
-  VPrecaCode,
   UseBitcoinProduct,
   ProductCatalog,
   GiftCardResult,
 } from "../types.js";
-
-const USEBITCOIN_BASE = "https://usebitcoin.jp";
 
 // ---------------------------------------------------------------------------
 // Product catalog
@@ -63,14 +65,6 @@ export const PRODUCT_CATALOG: Record<UseBitcoinProduct, ProductCatalog> = {
 
 const ALL_PRODUCT_NAMES = Object.keys(PRODUCT_CATALOG) as UseBitcoinProduct[];
 
-// ---------------------------------------------------------------------------
-// Generic purchase function
-// ---------------------------------------------------------------------------
-
-/**
- * Buy a gift card on UseBitcoin.jp.
- * Works for any product in PRODUCT_CATALOG.
- */
 export async function buyGiftCard(
   product: UseBitcoinProduct,
   amount: number,
@@ -90,80 +84,42 @@ export async function buyGiftCard(
     );
   }
 
-  const productUrl = `${USEBITCOIN_BASE}/ja/products/${catalog.slug}/${catalog.skuPrefix}-${amount}`;
+  const sku = `${catalog.skuPrefix}-${amount}`;
+  const invoice = await createInvoice(sku, 1);
 
-  return withPage(async (page) => {
-    // 1. Navigate to product page
-    await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await humanDelay();
+  const payResult = await payBolt11(invoice.bolt11);
+  if (!payResult.preimage) {
+    throw new Error("Lightning payment failed — no preimage received");
+  }
 
-    // 2. Accept terms checkbox (React Aria custom component)
-    const termsLabel = page.getByText("利用規約に同意します");
-    if (await termsLabel.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await termsLabel.click();
-      await humanDelay(300, 600);
-    } else {
-      const termsCheckbox = page.getByRole("checkbox").first();
-      if (await termsCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await termsCheckbox.click({ force: true });
-        await humanDelay(300, 600);
-      }
-    }
+  const order = await pollOrderUntilComplete(invoice.order_id);
+  if (!SUCCESS_STATUSES.has(order.status)) {
+    throw new Error(
+      `UseBitcoin order ${invoice.order_id} finished with non-success status "${order.status}". Raw: ${JSON.stringify(order)}`,
+    );
+  }
 
-    // 3. Proceed to purchase
-    const proceedButton = page
-      .getByRole("button", { name: /購入へ進む|購入|proceed/i })
-      .first();
-    await proceedButton.waitFor({ timeout: 10000 });
-    await proceedButton.click();
+  const { code, secondaryCode } = extractCodesFromOrder(order);
 
-    // 4. Wait for payment page (Lightning invoice)
-    await page.waitForSelector('text=/インボイスをコピー|sats|lightning/i', {
-      timeout: 30000,
-    });
-    await humanDelay(300, 600);
+  // Log the raw settled order: the API's post-payment payload shape is not
+  // yet documented, so we need the first live runs to pin down field names.
+  // stderr is safe — stdio MCP transport uses stdout only.
+  console.error(
+    `[usebitcoin] order ${invoice.order_id} settled (status=${order.status}):`,
+    JSON.stringify(order),
+  );
 
-    // 5. Extract BOLT11 invoice
-    const bolt11 = await extractLightningInvoiceFromPage(page);
-    if (!bolt11) {
-      throw new Error("Could not extract Lightning invoice from payment page.");
-    }
-
-    // 6. Pay via payment strategy (auto: Cashu first → Ark fallback)
-    const payResult = await payBolt11(bolt11);
-    if (!payResult.preimage) {
-      throw new Error("Lightning payment failed — no preimage received");
-    }
-
-    // 7. Wait for payment confirmation (SSE → redirect or status text)
-    await Promise.race([
-      page.waitForURL(/\/orders\//, { timeout: 120000 }),
-      page
-        .waitForSelector('text=/完了|fulfilled|success|paid/i', {
-          timeout: 120000,
-        })
-        .catch(() => null),
-    ]);
-
-    // 8. Extract gift code(s)
-    const giftData = await extractGiftCodeGeneric(page, product);
-
-    // Extract order ID
-    const orderMatch = page.url().match(/\/orders\/([^/?]+)/);
-    const orderId = orderMatch?.[1] ?? "unknown";
-
-    return {
-      product,
-      code: giftData.code,
-      secondaryCode: giftData.secondaryCode,
-      amount,
-      orderId,
-      preimage: payResult.preimage,
-      paymentMethod: payResult.method as "cashu" | "ark",
-      satsPaid: payResult.amount,
-      fee: payResult.fee,
-    };
-  });
+  return {
+    product,
+    code,
+    secondaryCode,
+    amount,
+    orderId: invoice.order_id,
+    preimage: payResult.preimage,
+    paymentMethod: payResult.method as "cashu" | "ark",
+    satsPaid: payResult.amount,
+    fee: payResult.fee,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +127,7 @@ export async function buyGiftCard(
 // ---------------------------------------------------------------------------
 
 /**
- * Register the generic `usebitcoin_buy_gift_card` tool + legacy `usebitcoin_buy_vpreca`.
+ * Register the generic `usebitcoin_buy_gift_card` tool + legacy per-product tools.
  */
 export function registerUseBitcoinTools(server: McpServer): void {
   // ---- Generic multi-product tool ----
@@ -393,137 +349,4 @@ export function registerUseBitcoinTools(server: McpServer): void {
       }
     },
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers — Lightning invoice extraction
-// ---------------------------------------------------------------------------
-
-async function extractLightningInvoiceFromPage(
-  page: import("playwright").Page,
-): Promise<string | null> {
-  // Strategy 1: Copy button with data attribute
-  const copyBtn = page
-    .getByRole("button", { name: /インボイスをコピー|コピー|copy/i })
-    .first();
-  if (await copyBtn.isVisible().catch(() => false)) {
-    const dataInvoice = await copyBtn.getAttribute("data-clipboard-text");
-    if (dataInvoice && dataInvoice.startsWith("lnbc")) return dataInvoice;
-  }
-
-  // Strategy 2: Find lnbc in page text
-  const allText = await page.textContent("body");
-  if (allText) {
-    const match = allText.match(/\b(lnbc[a-z0-9]+)\b/i);
-    if (match) return match[1];
-  }
-
-  // Strategy 3: Search DOM for hidden invoice data
-  const invoice = await page.evaluate(() => {
-    const els = document.querySelectorAll("[data-invoice], [data-bolt11], [data-value]");
-    for (const el of els) {
-      for (const attr of ["data-invoice", "data-bolt11", "data-value"]) {
-        const val = el.getAttribute(attr);
-        if (val && val.startsWith("lnbc")) return val;
-      }
-    }
-    const all = document.body.innerHTML;
-    const match = all.match(/(lnbc[a-z0-9]{50,})/i);
-    return match ? match[1] : null;
-  });
-  if (invoice) return invoice;
-
-  return null;
-}
-
-/**
- * Extract gift code from the order result page.
- * Generic version supporting all product types.
- */
-async function extractGiftCodeGeneric(
-  page: import("playwright").Page,
-  product: UseBitcoinProduct,
-): Promise<{ code: string; secondaryCode?: string }> {
-  await humanDelay(500, 1000);
-
-  // Strategy 1: Readonly input fields (UseBitcoin renders codes in readonly inputs)
-  const inputs = await page.locator("input[readonly], input[disabled]").all();
-  if (inputs.length >= 1) {
-    const code = await inputs[0].inputValue().catch(() => "");
-    const secondary =
-      inputs.length >= 2
-        ? await inputs[1].inputValue().catch(() => "")
-        : undefined;
-    if (code) {
-      return { code, secondaryCode: secondary || undefined };
-    }
-  }
-
-  // Strategy 2: "コード N/N" pattern in body text
-  const bodyText = (await page.textContent("body")) ?? "";
-
-  // V-Preca pattern: "コード 1/1 {alphanumeric} {4digits}"
-  if (product === "vpreca") {
-    const match = bodyText.match(
-      /コード\s*\d+\/\d+\s*([A-Za-z0-9]{10,20})\s*(\d{4})/,
-    );
-    if (match) return { code: match[1], secondaryCode: match[2] };
-  }
-
-  // BitCash pattern: hiragana ID
-  if (product === "bitcash") {
-    const hiraganaMatch = bodyText.match(/コード\s*\d*\/?\d*\s*([\u3040-\u309F]{8,20})/);
-    if (hiraganaMatch) return { code: hiraganaMatch[1] };
-    const fallbackHiragana = bodyText.match(/([\u3040-\u309F]{8,20})/);
-    if (fallbackHiragana) return { code: fallbackHiragana[1] };
-  }
-
-  // DMM pattern: hyphenated (XXXX-XXXX-XXXX-XXXX) or plain alphanumeric code
-  if (product === "dmm") {
-    const hyphenatedMatch = bodyText.match(
-      /コード\s*\d*\/?\d*\s*([A-Za-z0-9]{4,6}(?:-[A-Za-z0-9]{4,6}){2,4})/,
-    );
-    if (hyphenatedMatch) return { code: hyphenatedMatch[1] };
-    // Plain lowercase alphanumeric code (e.g. "5txkbqhxvq49fnpw")
-    const plainMatch = bodyText.match(
-      /コード\s*\d*\/?\d*\s*([a-z0-9]{12,20})/,
-    );
-    if (plainMatch) return { code: plainMatch[1] };
-  }
-
-  // Generic: "コード" followed by an alphanumeric string
-  const genericMatch = bodyText.match(
-    /コード\s*\d*\/?[\d]*\s*([A-Za-z0-9]{6,30})/,
-  );
-  if (genericMatch) return { code: genericMatch[1] };
-
-  // Strategy 3: Alphanumeric pattern fallback
-  const fallback = bodyText.match(/([A-Za-z][A-Za-z0-9]{9,29})/);
-  if (fallback) return { code: fallback[1] };
-
-  throw new Error(
-    `Could not extract gift code for ${PRODUCT_CATALOG[product]?.name ?? product} from the order page. ` +
-      "The page structure may have changed.",
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Legacy helper (re-exported for backward compat if needed)
-// ---------------------------------------------------------------------------
-
-/**
- * @deprecated Use buyGiftCard("vpreca", amount) instead.
- */
-export async function extractVPrecaCode(
-  page: import("playwright").Page,
-  expectedAmount: number,
-): Promise<VPrecaCode> {
-  const result = await extractGiftCodeGeneric(page, "vpreca");
-  return {
-    voucherCode: result.code,
-    cardLast4: result.secondaryCode ?? "",
-    cardNumber: result.code,
-    securityCode: result.secondaryCode ?? "",
-    amount: expectedAmount,
-  };
 }
