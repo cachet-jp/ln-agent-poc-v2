@@ -97,7 +97,7 @@ export async function buyGiftCard(
   const order = await pollOrderUntilComplete(invoice.order_id);
   if (order.status !== "fulfilled") {
     throw new Error(
-      `UseBitcoin order ${invoice.order_id} ended with status "${order.status}" (expected "fulfilled"). Raw: ${JSON.stringify(order)}`,
+      `UseBitcoin order ${invoice.order_id} ended with status "${order.status}" (expected "fulfilled").`,
     );
   }
 
