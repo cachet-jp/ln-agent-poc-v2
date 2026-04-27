@@ -7,6 +7,7 @@ import { getConfig } from "../lib/config.js";
 import { renderBolt11Qr } from "../lib/qr.js";
 import {
   createInvoice,
+  listProducts,
   pollOrderUntilComplete,
   extractCodesFromOrder,
 } from "../lib/usebitcoin-api.js";
@@ -87,9 +88,22 @@ export async function buyGiftCard(
   }
 
   const sku = `${catalog.skuPrefix}-${amount}`;
+
+  // Look up the vendor-quoted sats price for this SKU before requesting an
+  // invoice — passed to payBolt11 so a mutated bolt11 (different amount than
+  // the catalog quote) is rejected before any payment goes out.
+  const productsResp = await listProducts();
+  const variant = productsResp.products
+    .flatMap((p) => p.variants)
+    .find((v) => v.sku === sku);
+  if (!variant) {
+    throw new Error(`UseBitcoin SKU ${sku} is not in the live product catalog`);
+  }
+  const expectedSats = variant.price_sats;
+
   const invoice = await createInvoice(sku, 1);
 
-  const payResult = await payBolt11(invoice.bolt11);
+  const payResult = await payBolt11(invoice.bolt11, "auto", expectedSats);
   if (!payResult.preimage) {
     throw new Error("Lightning payment failed — no preimage received");
   }
