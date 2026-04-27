@@ -114,8 +114,15 @@ export function registerBitrefillTools(server: McpServer): void {
             throw new Error("Bitrefill did not return a Lightning invoice");
           }
 
-          // 2. Pay the Lightning invoice via Cashu → Ark fallback
-          const payResult = await payBolt11(invoice.lightningInvoice);
+          // 2. Pay the Lightning invoice via Cashu → Ark fallback.
+          // Pass the vendor-quoted satoshiPrice so payBolt11 rejects any
+          // bolt11 whose encoded amount doesn't match (catches MITM mutation
+          // of the invoice; full vendor compromise needs an external oracle).
+          const payResult = await payBolt11(
+            invoice.lightningInvoice,
+            "auto",
+            invoice.satoshiPrice,
+          );
           if (!payResult.preimage) {
             throw new Error("Lightning payment failed — no preimage received");
           }
