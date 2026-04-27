@@ -31,7 +31,7 @@ pnpm dev          # tsx src/server.ts (MCP stdio server)
 - **Config** (`src/lib/config.ts`) uses zod; all env vars documented in `.env.example`. Add new vars both places.
 - **Spend guardrails**: `MAX_SPEND_JPY` for gift-card purchases, `CASHU_MAX_BALANCE_SATS` for ecash minting. Never bypass these.
 - **UseBitcoin** uses the REST API (`src/lib/usebitcoin-api.ts`), not browser automation. Amazon / DMM / DLsite still use Playwright.
-- **Claw-cash (Ark)** is imported lazily. Code must work in Cashu-only mode where `claw-cash/` is absent or unbuilt.
+- **Claw-cash (Ark)** is imported lazily and is **off by default** (`ARK_ENABLED=false`). When off, `ark_*` and `cashu_mint_tokens` tools are not registered, and `payBolt11` never falls back to Ark — Cashu errors propagate. Top up via `cashu_create_invoice` + `cashu_claim_invoice` (any LN wallet pays the invoice). Set `ARK_ENABLED=true` in `.env` only when claw-cash is built, configured, and funded. Code must still work when `claw-cash/` is absent or unbuilt.
 
 ## Key Constraints
 
