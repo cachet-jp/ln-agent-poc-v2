@@ -31,6 +31,7 @@ vi.mock("./cashu-store.js", () => ({
   removeProofs: async () => {},
   getTotalBalance: async (mint: string) =>
     (_memProofs.get(mint) ?? []).reduce((s, p) => s + p.amount, 0),
+  assertStoreReady: async () => {},
 }));
 
 // Fake Wallet — send() and receive() are set per-test.
