@@ -107,6 +107,19 @@ async function ensureDataDir(): Promise<void> {
   }
 }
 
+/**
+ * Validate that the proof store can persist new proofs.
+ *
+ * Call this BEFORE any mint-side operation (`wallet.receive`, `wallet.mint*`,
+ * `wallet.melt*`, `wallet.send`). The mint commits state on those calls; if
+ * `addProofs` / `saveProofs` later throws (missing key, unwritable dir), the
+ * returned proofs vanish with the process and funds are burned at the mint.
+ */
+export async function assertStoreReady(): Promise<void> {
+  deriveKey();
+  await ensureDataDir();
+}
+
 async function readStore(): Promise<StoreData[]> {
   try {
     const raw = await readFile(STORE_FILE, "utf-8");
