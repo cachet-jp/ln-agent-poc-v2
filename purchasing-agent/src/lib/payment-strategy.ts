@@ -7,6 +7,7 @@
 
 import { isCashuEnabled, getCashuConfig } from "./cashu-config.js";
 import { meltTokens } from "./cashu-client.js";
+import { decodeBolt11Sats } from "./bolt11-amount.js";
 
 export type PaymentMethod = "ark" | "cashu" | "auto";
 
@@ -29,11 +30,27 @@ export interface PayBolt11Result extends PaymentResult {
  * - "cashu": Pay via Cashu melt (mint pays the invoice on your behalf)
  * - "ark": Pay via Ark wallet directly (Boltz submarine swap)
  * - "auto": Try Cashu first if enabled and funded, fall back to Ark
+ *
+ * `expectedSats`: when provided, decode the invoice's HRP and refuse to pay
+ * if the encoded sats don't match exactly. Vendor-supplied invoices MUST pass
+ * this — without it, a compromised vendor or MITM can return an inflated
+ * invoice and have it paid silently. User-paste flows (where the user IS the
+ * source of truth for the invoice) may omit it.
  */
 export async function payBolt11(
   bolt11: string,
   method: PaymentMethod = "auto",
+  expectedSats?: number,
 ): Promise<PayBolt11Result> {
+  if (expectedSats !== undefined) {
+    const encoded = decodeBolt11Sats(bolt11);
+    if (encoded !== expectedSats) {
+      throw new Error(
+        `bolt11 amount mismatch: expected ${expectedSats} sats, invoice encodes ${encoded} sats — refusing to pay`,
+      );
+    }
+  }
+
   if (method === "ark") {
     return payViaArk(bolt11);
   }
