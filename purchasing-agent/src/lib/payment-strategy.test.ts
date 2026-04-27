@@ -14,6 +14,12 @@ vi.mock("./cashu-config.js", () => ({
   getCashuConfig: (...args: unknown[]) => mockGetCashuConfig(...(args as [])),
 }));
 
+// Mock config — isArkEnabled gates all Ark code paths
+const mockIsArkEnabled = vi.fn<() => boolean>();
+vi.mock("./config.js", () => ({
+  isArkEnabled: (...args: unknown[]) => mockIsArkEnabled(...(args as [])),
+}));
+
 // Mock cashu-client — meltTokens
 const mockMeltTokens = vi.fn();
 vi.mock("./cashu-client.js", () => ({
@@ -60,9 +66,12 @@ describe("payBolt11", () => {
     vi.resetModules();
     vi.clearAllMocks();
 
-    // Sensible defaults — overridden in individual tests as needed
+    // Sensible defaults — overridden in individual tests as needed.
+    // Ark defaults to enabled here so the existing auto-fallback tests still
+    // exercise that path. Tests that need Ark off override this explicitly.
     mockIsCashuEnabled.mockReturnValue(false);
     mockGetCashuConfig.mockReturnValue({ CASHU_PREFERRED: true });
+    mockIsArkEnabled.mockReturnValue(true);
     mockPayLightningInvoice.mockResolvedValue(arkResult);
     mockMeltTokens.mockResolvedValue(cashuResult);
     mockDecodeBolt11Sats.mockReturnValue(1000);
@@ -214,6 +223,57 @@ describe("payBolt11", () => {
       await expect(payBolt11(SAMPLE_BOLT11, "auto")).rejects.toThrow(
         "Ark: swap failed",
       );
+    });
+  });
+
+  // ── ARK_ENABLED=false (default) ─────────────────────────────────
+
+  describe("ARK_ENABLED=false", () => {
+    beforeEach(() => {
+      mockIsArkEnabled.mockReturnValue(false);
+    });
+
+    it('rejects method="ark" with a guidance message', async () => {
+      const { payBolt11 } = await import("./payment-strategy.js");
+      await expect(payBolt11(SAMPLE_BOLT11, "ark")).rejects.toThrow(
+        /ARK_ENABLED is false/,
+      );
+      expect(mockPayLightningInvoice).not.toHaveBeenCalled();
+    });
+
+    it("auto: uses Cashu and propagates failure (no Ark fallback)", async () => {
+      mockIsCashuEnabled.mockReturnValue(true);
+      mockGetCashuConfig.mockReturnValue({ CASHU_PREFERRED: true });
+      mockMeltTokens.mockRejectedValue(new Error("Cashu: no balance"));
+
+      const { payBolt11 } = await import("./payment-strategy.js");
+      await expect(payBolt11(SAMPLE_BOLT11, "auto")).rejects.toThrow(
+        "Cashu: no balance",
+      );
+      expect(mockPayLightningInvoice).not.toHaveBeenCalled();
+    });
+
+    it("auto: falls back to Cashu when Cashu is configured but not preferred", async () => {
+      mockIsCashuEnabled.mockReturnValue(true);
+      mockGetCashuConfig.mockReturnValue({ CASHU_PREFERRED: false });
+
+      const { payBolt11 } = await import("./payment-strategy.js");
+      const result = await payBolt11(SAMPLE_BOLT11, "auto");
+
+      expect(mockMeltTokens).toHaveBeenCalledWith(SAMPLE_BOLT11);
+      expect(mockPayLightningInvoice).not.toHaveBeenCalled();
+      expect(result.method).toBe("cashu");
+    });
+
+    it("auto: throws clearly when neither Cashu nor Ark is available", async () => {
+      mockIsCashuEnabled.mockReturnValue(false);
+
+      const { payBolt11 } = await import("./payment-strategy.js");
+      await expect(payBolt11(SAMPLE_BOLT11, "auto")).rejects.toThrow(
+        /No payment method available/,
+      );
+      expect(mockMeltTokens).not.toHaveBeenCalled();
+      expect(mockPayLightningInvoice).not.toHaveBeenCalled();
     });
   });
 

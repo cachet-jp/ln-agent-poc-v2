@@ -35,6 +35,13 @@ const configSchema = z.object({
   DLSITE_PASSWORD: optStr,
 
   // clw.cash / Ark
+  // Off by default: agents tend to mistake ark_* tools for the right charge
+  // path and fail against an unfunded Ark wallet. Opt in only when claw-cash
+  // is configured and funded.
+  ARK_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   CLW_API_BASE_URL: z.string().url().default("https://api.clw.cash"),
   CLW_SESSION_TOKEN: optStr,
   CLW_IDENTITY_ID: optUuid,
@@ -83,4 +90,8 @@ export function getConfig(): Config {
     _config = configSchema.parse(process.env);
   }
   return _config;
+}
+
+export function isArkEnabled(): boolean {
+  return getConfig().ARK_ENABLED;
 }
