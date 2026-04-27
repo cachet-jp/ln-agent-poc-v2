@@ -39,12 +39,15 @@ if (config.CASHU_MINT_URL) {
   registerVPrecaInquiryTools(server);
 }
 
-// Ark wallet tools — depend on claw-cash submodule; skip if unavailable
-try {
-  const { registerArkTools } = await import("./tools/ark-wallet.js");
-  registerArkTools(server);
-} catch (err) {
-  logger.info("Ark tools unavailable (Cashu-only mode)", { error: (err as Error).message });
+// Ark wallet tools — opt-in via ARK_ENABLED (default off). Hidden when off so
+// agents don't reach for ark_* on an unfunded/unconfigured Ark wallet.
+if (config.ARK_ENABLED) {
+  try {
+    const { registerArkTools } = await import("./tools/ark-wallet.js");
+    registerArkTools(server);
+  } catch (err) {
+    logger.info("Ark tools unavailable (claw-cash submodule missing?)", { error: (err as Error).message });
+  }
 }
 
 // Bitrefill tools — search/detail always available; purchase tools require API credentials
