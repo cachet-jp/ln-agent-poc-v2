@@ -25,6 +25,7 @@ import {
   saveProofs,
   removeProofs,
   getTotalBalance,
+  assertStoreReady,
 } from "./cashu-store.js";
 // Lazy import — clw-client depends on claw-cash submodule which may not be available.
 // Only mintTokens() needs it (to pay the mint's Lightning invoice via Ark).
@@ -162,6 +163,7 @@ export async function getCashuBalance(): Promise<CashuBalanceInfo> {
  * 5. Store proofs locally
  */
 export async function mintTokens(amountSats: number): Promise<MintResult> {
+  await assertStoreReady();
   const cfg = getCashuConfig();
   const mintUrl = getMintUrl();
 
@@ -218,6 +220,7 @@ export async function mintTokens(amountSats: number): Promise<MintResult> {
  * 4. Update stored proofs (remove spent, add change)
  */
 export async function meltTokens(bolt11: string): Promise<MeltResult> {
+  await assertStoreReady();
   const mintUrl = getMintUrl();
   const wallet = await getCashuWallet();
 
@@ -267,6 +270,7 @@ export async function meltTokens(bolt11: string): Promise<MeltResult> {
  * Receive external Cashu tokens (swap with mint for fresh proofs).
  */
 export async function receiveTokens(encodedToken: string): Promise<ReceiveResult> {
+  await assertStoreReady();
   const mintUrl = getMintUrl();
   const wallet = await getCashuWallet();
 
@@ -308,6 +312,7 @@ export async function receiveTokens(encodedToken: string): Promise<ReceiveResult
  * (typically 0-few sats). Cheap insurance against proof loss.
  */
 export async function sendTokens(amountSats: number): Promise<SendResult> {
+  await assertStoreReady();
   const mintUrl = getMintUrl();
   const wallet = await getCashuWallet();
 
@@ -438,6 +443,7 @@ export async function createMintInvoice(amountSats: number): Promise<MintInvoice
  * Can be called multiple times safely — only claims once.
  */
 export async function claimMintInvoice(quoteId: string, amountSats: number): Promise<MintInvoiceCheckResult> {
+  await assertStoreReady();
   const mintUrl = getMintUrl();
   const wallet = await getCashuWallet();
 

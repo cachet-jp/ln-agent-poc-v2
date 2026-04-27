@@ -350,6 +350,39 @@ describe("cashu-store", () => {
   });
 
   // -------------------------------------------------------------------------
+  // assertStoreReady — pre-flight before any mint-side op.
+  // Regression for the 2026-04-27 incident where receiveTokens swapped at the
+  // mint, then addProofs threw because CASHU_STORE_KEY was empty, burning the
+  // newly-issued proofs at the mint with no recovery path.
+  // -------------------------------------------------------------------------
+
+  describe("assertStoreReady", () => {
+    it("throws when neither CASHU_STORE_KEY nor CLW_SESSION_TOKEN is available", async () => {
+      _storeKey = "";
+      delete process.env.CLW_SESSION_TOKEN;
+
+      const { assertStoreReady } = await import("./cashu-store.js");
+      await expect(assertStoreReady()).rejects.toThrow(
+        /No CASHU_STORE_KEY or CLW_SESSION_TOKEN/,
+      );
+    });
+
+    it("throws for invalid CASHU_STORE_KEY length", async () => {
+      _storeKey = "aabb";
+
+      const { assertStoreReady } = await import("./cashu-store.js");
+      await expect(assertStoreReady()).rejects.toThrow(
+        /CASHU_STORE_KEY must be 64 hex characters/,
+      );
+    });
+
+    it("resolves silently when key is valid", async () => {
+      const { assertStoreReady } = await import("./cashu-store.js");
+      await expect(assertStoreReady()).resolves.toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // saveProofs (full replacement)
   // -------------------------------------------------------------------------
 
