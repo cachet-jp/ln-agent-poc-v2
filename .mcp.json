@@ -1,16 +1,22 @@
 {
   "mcpServers": {
     "purchasing-agent": {
-      "command": "npx",
-      "args": ["tsx", "src/server.ts"],
+      "command": "bash",
+      "args": [
+        "-c",
+        "export PATH=\"$HOME/.volta/bin:$HOME/.fnm:$HOME/.local/share/fnm:/opt/homebrew/bin:/usr/local/bin:$PATH\" && exec npx tsx src/server.ts"
+      ],
       "cwd": "purchasing-agent",
       "env": {
         "NODE_ENV": "development"
       }
     },
     "bitrefill": {
-      "command": "npx",
-      "args": ["-y", "bitrefill-mcp-server"],
+      "command": "bash",
+      "args": [
+        "-c",
+        "export PATH=\"$HOME/.volta/bin:$HOME/.fnm:$HOME/.local/share/fnm:/opt/homebrew/bin:/usr/local/bin:$PATH\" && exec npx -y bitrefill-mcp-server"
+      ],
       "env": {
         "BITREFILL_API_ID": "",
         "BITREFILL_API_SECRET": ""
