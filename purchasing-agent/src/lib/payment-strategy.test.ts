@@ -27,6 +27,14 @@ vi.mock("./clw-client.js", () => ({
     mockPayLightningInvoice(...args),
 }));
 
+// Mock the bolt11 amount decoder. Existing tests pass synthetic invoices that
+// don't decode against real-world data, so we control the return value here.
+const mockDecodeBolt11Sats = vi.fn<(b: string) => number>();
+vi.mock("./bolt11-amount.js", () => ({
+  decodeBolt11Sats: (...args: unknown[]) =>
+    mockDecodeBolt11Sats(...(args as [string])),
+}));
+
 // ---------- helpers ----------
 
 const SAMPLE_BOLT11 =
@@ -57,6 +65,7 @@ describe("payBolt11", () => {
     mockGetCashuConfig.mockReturnValue({ CASHU_PREFERRED: true });
     mockPayLightningInvoice.mockResolvedValue(arkResult);
     mockMeltTokens.mockResolvedValue(cashuResult);
+    mockDecodeBolt11Sats.mockReturnValue(1000);
   });
 
   // ── method="ark" ────────────────────────────────────────────────
@@ -220,6 +229,53 @@ describe("payBolt11", () => {
       // auto + cashu disabled => ark
       expect(mockPayLightningInvoice).toHaveBeenCalledWith(SAMPLE_BOLT11);
       expect(result.method).toBe("ark");
+    });
+  });
+
+  // ── expectedSats validation (vendor-invoice MITM guard) ─────────
+
+  describe("expectedSats amount validation", () => {
+    it("throws before paying when invoice encodes a different amount", async () => {
+      mockDecodeBolt11Sats.mockReturnValue(50_000);
+
+      const { payBolt11 } = await import("./payment-strategy.js");
+      await expect(
+        payBolt11(SAMPLE_BOLT11, "cashu", 5_000),
+      ).rejects.toThrow(/bolt11 amount mismatch.*expected 5000.*encodes 50000/);
+
+      expect(mockMeltTokens).not.toHaveBeenCalled();
+      expect(mockPayLightningInvoice).not.toHaveBeenCalled();
+    });
+
+    it("proceeds when invoice amount matches expected", async () => {
+      mockDecodeBolt11Sats.mockReturnValue(5_000);
+
+      const { payBolt11 } = await import("./payment-strategy.js");
+      await payBolt11(SAMPLE_BOLT11, "cashu", 5_000);
+
+      expect(mockDecodeBolt11Sats).toHaveBeenCalledWith(SAMPLE_BOLT11);
+      expect(mockMeltTokens).toHaveBeenCalledWith(SAMPLE_BOLT11);
+    });
+
+    it("propagates decoder errors (e.g. malformed bolt11) before paying", async () => {
+      mockDecodeBolt11Sats.mockImplementation(() => {
+        throw new Error("bolt11 invoice missing bech32 separator");
+      });
+
+      const { payBolt11 } = await import("./payment-strategy.js");
+      await expect(
+        payBolt11("not-a-real-bolt11", "ark", 5_000),
+      ).rejects.toThrow(/bech32 separator/);
+
+      expect(mockPayLightningInvoice).not.toHaveBeenCalled();
+    });
+
+    it("skips validation when expectedSats is omitted (back-compat)", async () => {
+      const { payBolt11 } = await import("./payment-strategy.js");
+      await payBolt11(SAMPLE_BOLT11, "ark");
+
+      expect(mockDecodeBolt11Sats).not.toHaveBeenCalled();
+      expect(mockPayLightningInvoice).toHaveBeenCalledWith(SAMPLE_BOLT11);
     });
   });
 
