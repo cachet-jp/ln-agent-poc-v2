@@ -90,7 +90,29 @@ BTC (onchain) → Ark (offchain vTXO) → Cashu チャージ → melt → UseBit
 
 Claude Desktop や Claude Code から MCP ツールとして直接呼び出す方法です。
 
-### A-1. インストール
+### A-1. 前提ツール (Volta)
+
+このプロジェクトでは Node.js / pnpm のバージョン管理に [Volta](https://volta.sh/) を使うことを推奨しています。Claude Code から MCP サーバーを起動する際も `$HOME/.volta/bin` を `PATH` に通して `npx` を解決しているため (`.mcp.json` 参照)、Volta が入っていれば追加設定不要で動きます。
+
+**インストール**:
+
+```bash
+curl https://get.volta.sh | bash
+# シェルを開き直すか、以下を実行
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
+```
+
+**Node + pnpm を導入**:
+
+```bash
+volta install node@20      # Node 20 以上が必須 (engines.node: ">=20.0.0")
+volta install pnpm
+```
+
+リポジトリ直下に降りた時に `node -v` / `pnpm -v` がそれぞれ表示されれば OK です。Volta を使わない場合でも、Node 20+ と pnpm が `PATH` に通っていれば動作します。
+
+### A-2. インストール
 
 ```bash
 git clone --recurse-submodules https://github.com/cachet-jp/ln-agent-poc-v2.git
@@ -101,7 +123,7 @@ npx playwright install chromium   # 初回のみ（Amazon / DMM / DLsite 自動�
 
 > submodule 付きで clone するのを忘れた場合は `git submodule update --init --recursive` を実行してください。Ark ウォレット連携 (`claw-cash/`) に必要です（Cashu-only モードでは任意）。
 
-### A-2. 環境変数
+### A-3. 環境変数
 
 ```bash
 cp .env.example .env
@@ -131,7 +153,7 @@ CLW_PUBLIC_KEY=<33-byte 圧縮公開鍵 hex>
 CLW_ARK_SERVER_URL=https://arkade.computer
 ```
 
-### A-3. Claude Desktop に登録
+### A-4. Claude Desktop に登録
 
 `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -149,14 +171,14 @@ CLW_ARK_SERVER_URL=https://arkade.computer
 
 > `.env` ファイルを配置済みなら `env` フィールドは不要です。
 
-### A-4. Claude Code に登録
+### A-5. Claude Code に登録
 
 ```bash
 cd ln-agent-poc-v2/purchasing-agent
 claude mcp add purchasing-agent -- npx tsx src/server.ts
 ```
 
-### A-5. 動作確認
+### A-6. 動作確認
 
 Claude のチャットで以下を試してください:
 
@@ -175,7 +197,7 @@ Claude のチャットで以下を試してください:
 
 ### B-1. セットアップ
 
-[セットアップ A](#セットアップ-a--mcp-サーバーとして使う) の A-1 〜 A-4 を完了してください。
+[セットアップ A](#セットアップ-a--mcp-サーバーとして使う) の A-1 〜 A-5 を完了してください。
 
 SKILL ファイルはリポジトリの `.claude/commands/` に含まれているため、Claude Code でこのリポジトリを開くと自動で認識されます。
 
