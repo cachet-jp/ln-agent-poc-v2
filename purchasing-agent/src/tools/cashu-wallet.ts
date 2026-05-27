@@ -76,8 +76,9 @@ export function registerCashuTools(server: McpServer): void {
           token: result.token,
           amount: `${result.amount.toLocaleString()} sats`,
           message:
-            "Share this token string (or scan the QR) with the recipient. " +
-            "They can redeem it with any Cashu wallet.",
+            "Share this token with the recipient. " +
+            "**Important**: to display the QR to the user, call render_qr with this token — " +
+            "the image content alone is not rendered inline by every MCP client.",
         };
 
         let qrBase64: string | undefined;
@@ -200,6 +201,8 @@ export function registerCashuTools(server: McpServer): void {
                   expiry: new Date(result.expiry * 1000).toISOString(),
                   message:
                     "Pay this Lightning invoice from any wallet. " +
+                    "**Important**: to display the QR to the user, call render_qr with this bolt11 — " +
+                    "the image content alone is not rendered inline by every MCP client. " +
                     "After payment, call cashu_claim_invoice with the quoteId to claim your ecash.",
                 },
                 null,
