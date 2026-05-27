@@ -10,7 +10,8 @@ import {
   createMintInvoice,
   claimMintInvoice,
 } from "../lib/cashu-client.js";
-import { errorResponse, withErrorHandler } from "../lib/tool-helpers.js";
+import { jsonResponse, errorResponse, withErrorHandler } from "../lib/tool-helpers.js";
+import { renderTextQr } from "../lib/qr.js";
 
 const formatSats = (n: number) =>
   `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
@@ -54,27 +55,60 @@ export function registerCashuTools(server: McpServer): void {
   );
 
   // ---- cashu_send_tokens ----
+  // SPECIAL CASE: Returns mixed content (text + image), so we use
+  // jsonResponse/errorResponse manually instead of withErrorHandler.
   server.tool(
     "cashu_send_tokens",
     "Create a Cashu ecash token string to send to someone. " +
-      "The token can be shared as text and redeemed by the recipient.",
+      "Returns the token string and a QR code image of the token, so the " +
+      "recipient can scan or copy it and redeem with any Cashu wallet.",
     {
       amount: z
         .number()
         .positive()
         .describe("Amount in satoshis to send as ecash tokens"),
     },
-    async ({ amount }) =>
-      withErrorHandler(async () => {
+    async ({ amount }) => {
+      try {
         const result = await sendTokens(amount);
-        return {
+        const payload = {
           success: true,
           token: result.token,
           amount: `${result.amount.toLocaleString()} sats`,
           message:
-            "Share this token string with the recipient. They can redeem it with any Cashu wallet.",
+            "Share this token string (or scan the QR) with the recipient. " +
+            "They can redeem it with any Cashu wallet.",
         };
-      }),
+
+        let qrBase64: string | undefined;
+        try {
+          const qr = await renderTextQr(result.token);
+          qrBase64 = qr.base64;
+        } catch {
+          qrBase64 = undefined;
+        }
+
+        if (!qrBase64) {
+          return jsonResponse(payload);
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(payload, null, 2),
+            },
+            {
+              type: "image" as const,
+              data: qrBase64,
+              mimeType: "image/png",
+            },
+          ],
+        };
+      } catch (err) {
+        return errorResponse(`Send failed: ${(err as Error).message}`);
+      }
+    },
   );
 
   // ---- cashu_receive_tokens ----
