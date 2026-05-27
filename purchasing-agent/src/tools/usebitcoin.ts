@@ -103,7 +103,7 @@ export async function buyGiftCard(
 
   const invoice = await createInvoice(sku, 1);
 
-  const payResult = await payBolt11(invoice.bolt11, "auto", expectedSats);
+  const payResult = await payBolt11(invoice.bolt11, "cashu", expectedSats);
   if (!payResult.preimage) {
     throw new Error("Lightning payment failed — no preimage received");
   }
@@ -124,7 +124,7 @@ export async function buyGiftCard(
     amount,
     orderId: invoice.order_id,
     preimage: payResult.preimage,
-    paymentMethod: payResult.method as "cashu" | "ark",
+    paymentMethod: payResult.method,
     satsPaid: payResult.amount,
     fee: payResult.fee,
   };
@@ -141,7 +141,7 @@ export function registerUseBitcoinTools(server: McpServer): void {
   // ---- Generic multi-product tool ----
   server.tool(
     "usebitcoin_buy_gift_card",
-    "Buy a gift card on UseBitcoin.jp using Bitcoin Lightning payment (via Cashu ecash or Ark wallet). " +
+    "Buy a gift card on UseBitcoin.jp using Bitcoin Lightning payment via Cashu ecash. " +
       `Supported products: ${ALL_PRODUCT_NAMES.join(", ")}. ` +
       "Returns the gift card code, order ID, and payment details.",
     {
@@ -353,141 +353,4 @@ export function registerUseBitcoinTools(server: McpServer): void {
     },
   );
 
-  // ---- Legacy V-Preca tool (backward compatible) ----
-  const VPRECA_AMOUNTS = PRODUCT_CATALOG.vpreca.amounts;
-  server.tool(
-    "usebitcoin_buy_vpreca",
-    "Buy a V-Preca gift card on UseBitcoin.jp using Lightning payment. " +
-      "Returns card number and security code. " +
-      `Valid amounts (JPY): ${VPRECA_AMOUNTS.join(", ")}`,
-    {
-      amount: z
-        .number()
-        .int()
-        .refine((v) => VPRECA_AMOUNTS.includes(v), {
-          message: `Amount must be one of: ${VPRECA_AMOUNTS.join(", ")}`,
-        })
-        .describe(`V-Preca amount in JPY. Valid: ${VPRECA_AMOUNTS.join(", ")}`),
-    },
-    async ({ amount }) => {
-      try {
-        const result = await buyGiftCard("vpreca", amount);
-        // Legacy response format
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  voucherCode: result.code,
-                  cardLast4: result.secondaryCode ?? "",
-                  amount: result.amount,
-                  expiryDate: result.expiryDate ?? "not provided",
-                  orderId: result.orderId,
-                  paymentPreimage: result.preimage,
-                  // deprecated fields for backward compat
-                  cardNumber: result.code,
-                  securityCode: result.secondaryCode ?? "",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [
-            { type: "text" as const, text: `V-Preca purchase failed: ${(err as Error).message}` },
-          ],
-          isError: true,
-        };
-      }
-    },
-  );
-
-  // ---- Legacy DMM tool (backward compatible) ----
-  const DMM_AMOUNTS = PRODUCT_CATALOG.dmm.amounts;
-  server.tool(
-    "usebitcoin_buy_dmm_points",
-    "Buy a DMM point code on UseBitcoin.jp using Lightning payment (8% discount). " +
-      "Returns the point code string to charge on DMM.com. " +
-      `Valid amounts (JPY): ${DMM_AMOUNTS.join(", ")}`,
-    {
-      amount: z
-        .number()
-        .int()
-        .refine((v) => DMM_AMOUNTS.includes(v), {
-          message: `Amount must be one of: ${DMM_AMOUNTS.join(", ")}`,
-        })
-        .describe(`DMM point code amount in JPY. Valid: ${DMM_AMOUNTS.join(", ")}`),
-    },
-    async ({ amount }) => {
-      try {
-        const result = await buyGiftCard("dmm", amount);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                { success: true, code: result.code, amount: result.amount, orderId: result.orderId },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [
-            { type: "text" as const, text: `DMM point code purchase failed: ${(err as Error).message}` },
-          ],
-          isError: true,
-        };
-      }
-    },
-  );
-
-  // ---- Legacy BitCash tool (backward compatible) ----
-  const BITCASH_AMOUNTS = PRODUCT_CATALOG.bitcash.amounts;
-  server.tool(
-    "usebitcoin_buy_bitcash",
-    "Buy a BitCash code on UseBitcoin.jp using Lightning payment. " +
-      "Returns the BitCash hiragana ID for use on DLsite, Niconico, etc. " +
-      `Valid amounts (JPY): ${BITCASH_AMOUNTS.join(", ")}`,
-    {
-      amount: z
-        .number()
-        .int()
-        .refine((v) => BITCASH_AMOUNTS.includes(v), {
-          message: `Amount must be one of: ${BITCASH_AMOUNTS.join(", ")}`,
-        })
-        .describe(`BitCash amount in JPY. Valid: ${BITCASH_AMOUNTS.join(", ")}`),
-    },
-    async ({ amount }) => {
-      try {
-        const result = await buyGiftCard("bitcash", amount);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                { success: true, hiraganaId: result.code, amount: result.amount, orderId: result.orderId },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [
-            { type: "text" as const, text: `BitCash purchase failed: ${(err as Error).message}` },
-          ],
-          isError: true,
-        };
-      }
-    },
-  );
 }

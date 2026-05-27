@@ -18,37 +18,30 @@ Cashu ecash ウォレットの残高確認、チャージ、トークン送受�
      1. `cashu_create_invoice` で invoice と QR コードを表示
      2. ユーザーが Phoenix / WoS 等の Lightning ウォレットで QR を読み取って支払い
      3. 支払い後、`cashu_claim_invoice` で ecash を受け取り
-   - **Ark 不要** — 誰でも Lightning 支払いでチャージできます
 
-3. **Ark からチャージ** — `cashu_mint_tokens`
-   - Ark ウォレットから Cashu にビットコインをチャージ（Hybrid モード）
-   - チャージ額（sats）を指定
-   - Ark 残高が不足している場合は `ark_get_balance` で確認
-
-4. **Lightning 支払い** — `cashu_melt_tokens`
+3. **Lightning 支払い** — `cashu_melt_tokens`
    - Cashu ecash で Lightning invoice を支払い
    - BOLT11 invoice 文字列を指定
 
-5. **トークン送信** — `cashu_send_tokens`
+4. **トークン送信** — `cashu_send_tokens`
    - 指定額の ecash トークン文字列を生成
    - 生成されたトークンをコピーして相手に渡せます
 
-6. **トークン受信** — `cashu_receive_tokens`
+5. **トークン受信** — `cashu_receive_tokens`
    - 受け取った ecash トークン文字列をウォレットに取り込み
    - `cashuA...` または `cashuB...` で始まる文字列を指定
 
-7. **プルーフ確認** — `cashu_check_proofs`
+6. **プルーフ確認** — `cashu_check_proofs`
    - 保存されている proof の有効性チェック
    - 使用済み proof は自動削除
 
-8. **Mint 情報** — `cashu_get_mint_info`
+7. **Mint 情報** — `cashu_get_mint_info`
    - 接続先 Cashu Mint のバージョン、対応機能を表示
 
 ### 日本語での案内例
 
 - 「残高を見たい」→ 残高確認
 - 「チャージしたい」「入金したい」「Lightning で入金」→ Lightning でチャージ（invoice 発行 → QR 表示 → 支払い確認）
-- 「Ark からチャージ」→ Ark からチャージ
 - 「送りたい」「渡したい」→ トークン送信
 - 「もらった」「受け取りたい」→ トークン受信
 - 「支払いたい」→ Lightning 支払い
