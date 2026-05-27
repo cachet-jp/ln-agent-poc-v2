@@ -2,7 +2,7 @@
  * Helper functions for MCP tool response formatting.
  *
  * Eliminates the repeated try/catch + JSON.stringify boilerplate
- * found across tool definitions (ark-wallet, bitrefill, cashu-wallet, etc.).
+ * found across tool definitions (bitrefill, cashu-wallet, etc.).
  */
 
 /** MCP text content item. */
@@ -15,6 +15,7 @@ interface TextContent {
 interface ToolResult {
   content: TextContent[];
   isError?: boolean;
+  [x: string]: unknown;
 }
 
 /**

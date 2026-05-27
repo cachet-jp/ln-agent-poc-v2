@@ -1,14 +1,7 @@
-/**
- * Cashu ecash MCP tool definitions.
- *
- * Follows the same pattern as ark-wallet.ts.
- */
-
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   getCashuBalance,
-  mintTokens,
   meltTokens,
   sendTokens,
   receiveTokens,
@@ -17,8 +10,7 @@ import {
   createMintInvoice,
   claimMintInvoice,
 } from "../lib/cashu-client.js";
-import { isArkEnabled } from "../lib/config.js";
-import { jsonResponse, errorResponse, withErrorHandler } from "../lib/tool-helpers.js";
+import { errorResponse, withErrorHandler } from "../lib/tool-helpers.js";
 
 const formatSats = (n: number) =>
   `${n.toLocaleString()} sats (${(n / 1e8).toFixed(8)} BTC)`;
@@ -39,37 +31,6 @@ export function registerCashuTools(server: McpServer): void {
         };
       }),
   );
-
-  // ---- cashu_mint_tokens ----
-  // Only registered when Ark is enabled — this tool pays the mint's invoice
-  // from the Ark wallet, so without Ark it can't function. When Ark is off,
-  // the right top-up path is cashu_create_invoice + cashu_claim_invoice
-  // (any external Lightning wallet pays the invoice).
-  if (isArkEnabled()) {
-    server.tool(
-      "cashu_mint_tokens",
-      "Mint new Cashu ecash tokens by paying a Lightning invoice from the Ark wallet. " +
-        "Converts Ark BTC → Cashu ecash. This charges your Cashu wallet.",
-      {
-        amount: z
-          .number()
-          .positive()
-          .describe("Amount in satoshis to mint as ecash tokens"),
-      },
-      async ({ amount }) =>
-        withErrorHandler(async () => {
-          const result = await mintTokens(amount);
-          return {
-            success: true,
-            amount: formatSats(result.amount),
-            quoteId: result.quoteId,
-            proofsReceived: result.proofs.length,
-            message:
-              "Cashu tokens minted successfully. Your Ark wallet was charged via Lightning.",
-          };
-        }),
-    );
-  }
 
   // ---- cashu_melt_tokens ----
   server.tool(

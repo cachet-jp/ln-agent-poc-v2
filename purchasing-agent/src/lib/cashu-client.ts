@@ -1,18 +1,9 @@
-/**
- * Cashu ecash wallet client — wraps @cashu/cashu-ts Wallet.
- *
- * Follows the same lazy-singleton pattern as clw-client.ts.
- * Provides high-level mint/melt/send/receive operations.
- */
-
 import {
   Wallet,
-  Mint,
   getEncodedToken,
   getDecodedToken,
   CheckStateEnum,
   type Proof,
-  type MintQuoteBolt11Response,
   type MeltQuoteBolt11Response,
   type MeltProofsResponse,
   type ProofState,
@@ -27,12 +18,6 @@ import {
   getTotalBalance,
   assertStoreReady,
 } from "./cashu-store.js";
-// Lazy import — clw-client depends on claw-cash submodule which may not be available.
-// Only mintTokens() needs it (to pay the mint's Lightning invoice via Ark).
-async function getPayLightningInvoice() {
-  const { payLightningInvoice } = await import("./clw-client.js");
-  return payLightningInvoice;
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,15 +30,6 @@ export interface CashuBalanceInfo {
   proofCount: number;
   /** Mint URL */
   mintUrl: string;
-}
-
-export interface MintResult {
-  /** Proofs received from the mint */
-  proofs: Proof[];
-  /** Total amount minted in sats */
-  amount: number;
-  /** Mint quote ID */
-  quoteId: string;
 }
 
 export interface MeltResult {
@@ -149,64 +125,6 @@ export async function getCashuBalance(): Promise<CashuBalanceInfo> {
     total,
     proofCount: proofs.length,
     mintUrl,
-  };
-}
-
-/**
- * Mint new Cashu tokens by paying a Lightning invoice from Ark wallet.
- *
- * Flow:
- * 1. Request mint quote (Mint returns a Lightning invoice)
- * 2. Pay that invoice via Ark wallet (Boltz submarine swap)
- * 3. Wait for payment confirmation
- * 4. Get proofs from mint
- * 5. Store proofs locally
- */
-export async function mintTokens(amountSats: number): Promise<MintResult> {
-  await assertStoreReady();
-  const cfg = getCashuConfig();
-  const mintUrl = getMintUrl();
-
-  // Check balance limit
-  const currentBalance = await getTotalBalance(mintUrl);
-  if (currentBalance + amountSats > cfg.CASHU_MAX_BALANCE_SATS) {
-    throw new Error(
-      `Minting ${amountSats} sats would exceed CASHU_MAX_BALANCE_SATS (${cfg.CASHU_MAX_BALANCE_SATS}). ` +
-        `Current balance: ${currentBalance} sats.`,
-    );
-  }
-
-  const wallet = await getCashuWallet();
-
-  // 1. Request mint quote — mint returns a Lightning invoice
-  const mintQuote = await wallet.createMintQuoteBolt11(amountSats);
-
-  // 2. Pay the Lightning invoice via Ark wallet
-  const payLightningInvoice = await getPayLightningInvoice();
-  const payResult = await payLightningInvoice(mintQuote.request);
-  if (!payResult.preimage) {
-    throw new Error("Failed to pay mint's Lightning invoice via Ark wallet");
-  }
-
-  // 3. Poll until quote is paid (mint needs to see the payment)
-  let quote: MintQuoteBolt11Response;
-  const maxAttempts = 30;
-  for (let i = 0; i < maxAttempts; i++) {
-    quote = await wallet.checkMintQuoteBolt11(mintQuote.quote);
-    if (quote.state === "PAID" || quote.state === "ISSUED") break;
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-
-  // 4. Get proofs from mint
-  const proofs = await wallet.mintProofsBolt11(amountSats, mintQuote.quote);
-
-  // 5. Store proofs
-  await addProofs(mintUrl, proofs);
-
-  return {
-    proofs,
-    amount: proofs.reduce((sum, p) => sum + p.amount, 0),
-    quoteId: mintQuote.quote,
   };
 }
 
