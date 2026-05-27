@@ -96,7 +96,18 @@ export async function searchProducts(
     // Return raw output wrapped as a single product for display
     return [{ id: "raw", name: parsed.raw, country: "", currency: "", category: "" }];
   }
-  return parsed.products ?? [];
+  // The CLI returns `_id` and array-valued `countries`/`categories`; normalize
+  // to the flat BitrefillProduct shape callers (and the MCP tool) expect.
+  const products: BitrefillProduct[] = (parsed.products ?? []).map((p: any) => ({
+    id: p._id ?? p.slug ?? p.id ?? "",
+    name: p.name ?? "",
+    country: p.countries?.[0] ?? p.country ?? options.country ?? "",
+    currency: p.currency ?? "",
+    category: p.categories?.[0] ?? p.category ?? "",
+    range: p.range,
+    packages: p.packages,
+  }));
+  return options.limit ? products.slice(0, options.limit) : products;
 }
 
 /**
