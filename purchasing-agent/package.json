@@ -1,14 +1,13 @@
 {
   "name": "@cachet-jp/purchasing-agent",
   "version": "0.1.0",
-  "description": "Ark Bitcoin AI Purchasing Agent - MCP tools for OpenClaw",
+  "description": "Bitcoin Lightning MCP purchasing agent (Cashu + UseBitcoin + Bitrefill + V-Preca inquiry)",
   "type": "module",
   "main": "dist/server.js",
   "bin": {
     "purchasing-agent": "dist/server.js"
   },
   "scripts": {
-    "postinstall": "cd ../claw-cash && pnpm install --frozen-lockfile || pnpm install",
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "start": "tsx src/server.ts",
@@ -17,14 +16,9 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@arkade-os/boltz-swap": "^0.2.18",
-    "@arkade-os/sdk": "^0.3.12",
     "@cashu/cashu-ts": "3.6.1",
-    "@clw-cash/sdk": "link:../claw-cash/remote-signer-identity",
-    "@clw-cash/skills": "link:../claw-cash/skills",
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "1.27.1",
     "dotenv": "^16.4.7",
-    "eventsource": "^4.1.0",
     "playwright": "^1.50.1",
     "qrcode": "^1.5.4",
     "zod": "^3.24.2"

@@ -3,11 +3,9 @@ import { config as dotenvConfig } from "dotenv";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-// Load .env from the purchasing-agent package root (not CWD)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenvConfig({ path: resolve(__dirname, "../../.env") });
 
-// Treat empty strings as undefined (Claude Desktop passes "" for unset env vars)
 const optStr = z.preprocess(
   (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
   z.string().min(1).optional(),
@@ -16,38 +14,8 @@ const optUrl = z.preprocess(
   (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
   z.string().url().optional(),
 );
-const optUuid = z.preprocess(
-  (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-  z.string().uuid().optional(),
-);
 
 const configSchema = z.object({
-  // Amazon
-  AMAZON_EMAIL: optStr,
-  AMAZON_PASSWORD: optStr,
-
-  // DMM
-  DMM_EMAIL: optStr,
-  DMM_PASSWORD: optStr,
-
-  // DLsite
-  DLSITE_EMAIL: optStr,
-  DLSITE_PASSWORD: optStr,
-
-  // clw.cash / Ark
-  // Off by default: agents tend to mistake ark_* tools for the right charge
-  // path and fail against an unfunded Ark wallet. Opt in only when claw-cash
-  // is configured and funded.
-  ARK_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((v) => v === "true"),
-  CLW_API_BASE_URL: z.string().url().default("https://api.clw.cash"),
-  CLW_SESSION_TOKEN: optStr,
-  CLW_IDENTITY_ID: optUuid,
-  CLW_PUBLIC_KEY: optStr,
-  CLW_ARK_SERVER_URL: optUrl,
-
   // Cashu ecash
   CASHU_MINT_URL: optUrl,
   CASHU_STORE_KEY: optStr,
@@ -74,7 +42,7 @@ const configSchema = z.object({
   // Guardrails
   MAX_SPEND_JPY: z.coerce.number().positive().default(5000),
 
-  // Browser
+  // Browser (V-Preca inquiry uses Playwright against Lifecard)
   HEADLESS: z
     .enum(["true", "false"])
     .default("true")
@@ -90,8 +58,4 @@ export function getConfig(): Config {
     _config = configSchema.parse(process.env);
   }
   return _config;
-}
-
-export function isArkEnabled(): boolean {
-  return getConfig().ARK_ENABLED;
 }
