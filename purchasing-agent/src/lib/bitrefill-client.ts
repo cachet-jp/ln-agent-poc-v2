@@ -122,6 +122,7 @@ export interface BuyOptions {
   productId: string;
   packageId: string | number;
   paymentMethod?: string;
+  email?: string;
 }
 
 /**
@@ -138,6 +139,7 @@ export async function buyProduct(options: BuyOptions): Promise<any> {
     "--cart_items", cartItem,
     "--payment_method", options.paymentMethod ?? "lightning",
   ];
+  if (options.email) args.push("--email", options.email);
   const output = await runCli(args);
   return parseCliOutput(output);
 }
@@ -235,7 +237,7 @@ export interface PaidInvoiceResult {
  */
 export async function waitForInvoicePaid(
   invoiceId: string,
-  { initialIntervalMs = 500, maxIntervalMs = 2000, timeoutMs = 60000 } = {},
+  { initialIntervalMs = 500, maxIntervalMs = 5000, timeoutMs = 180000 } = {},
 ): Promise<PaidInvoiceResult> {
   const start = Date.now();
   let interval = initialIntervalMs;
@@ -258,14 +260,16 @@ export async function waitForInvoicePaid(
     interval = Math.min(interval * 2, maxIntervalMs);
   }
   throw new Error(
-    `Bitrefill invoice ${invoiceId} did not complete within ${timeoutMs / 1000}s`,
+    `Bitrefill invoice ${invoiceId} did not complete within ${timeoutMs / 1000}s. ` +
+      `The Lightning payment may already have settled (Cashu melt is irreversible) — ` +
+      `the order can still complete and deliver by email. Check the wallet balance and the delivery inbox before retrying.`,
   );
 }
 
 // Legacy exports for backward compatibility
 export type CreateInvoiceProduct = BuyOptions;
 export type CreateInvoiceOptions = {
-  products: { product_id: string; value?: number; package_id?: string }[];
+  products: { product_id: string; value?: number; package_id?: string; email?: string }[];
   payment_method: string;
 };
 export async function createInvoice(options: CreateInvoiceOptions): Promise<BitrefillInvoice> {
@@ -274,6 +278,7 @@ export async function createInvoice(options: CreateInvoiceOptions): Promise<Bitr
     productId: product.product_id,
     packageId: product.value ?? product.package_id ?? 0,
     paymentMethod: options.payment_method,
+    email: product.email,
   });
   const response = result.response ?? result;
   return {
