@@ -3,10 +3,9 @@
     "purchasing-agent": {
       "command": "bash",
       "args": [
-        "-c",
-        "export PATH=\"$HOME/.volta/bin:$HOME/.fnm:$HOME/.local/share/fnm:/opt/homebrew/bin:/usr/local/bin:$PATH\" && exec npx tsx src/server.ts"
+        "-ilc",
+        "cd purchasing-agent && exec pnpm dev"
       ],
-      "cwd": "purchasing-agent",
       "env": {
         "NODE_ENV": "development"
       }
@@ -14,8 +13,8 @@
     "bitrefill": {
       "command": "bash",
       "args": [
-        "-c",
-        "export PATH=\"$HOME/.volta/bin:$HOME/.fnm:$HOME/.local/share/fnm:/opt/homebrew/bin:/usr/local/bin:$PATH\" && exec npx -y bitrefill-mcp-server"
+        "-ilc",
+        "exec npx -y bitrefill-mcp-server"
       ],
       "env": {
         "BITREFILL_API_ID": "",
