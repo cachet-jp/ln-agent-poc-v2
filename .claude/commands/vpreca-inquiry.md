@@ -36,9 +36,12 @@ Lifecard 照会ページにアクセス中...
 
 ### Step 3: 結果表示
 
-照会成功時は以下のフォーマットで表示してください:
+照会成功時は以下のフォーマットで表示してください。**カード番号より前に**、レスポンスに含まれる `terms_url` / `notice` を必ず表示し、ユーザーに利用規約ページの存在を案内してください（自動で同意処理を行っているため、事後の周知が必須です）:
 
 ```
+※ このリンクは V-Preca の利用規約ページです。事前に確認してください:
+  https://vpclogin.lifecard.co.jp/web/vpreca/vpreca_gift_inquiry_terms_agreement
+
 === V-Preca カード情報 ===
   カード番号 : XXXX XXXX XXXX XXXX
   有効期限   : MM/YY
