@@ -120,7 +120,7 @@ export function registerBitrefillTools(server: McpServer): void {
           // of the invoice; full vendor compromise needs an external oracle).
           const payResult = await payBolt11(
             invoice.lightningInvoice,
-            "auto",
+            "cashu",
             invoice.satoshiPrice,
           );
           if (!payResult.preimage) {
@@ -140,7 +140,7 @@ export function registerBitrefillTools(server: McpServer): void {
             pin: firstItem?.pin,
             orderId,
             preimage: payResult.preimage,
-            paymentMethod: payResult.method as "cashu" | "ark",
+            paymentMethod: payResult.method,
             satsPaid: invoice.satoshiPrice,
             fee: payResult.fee,
           };
