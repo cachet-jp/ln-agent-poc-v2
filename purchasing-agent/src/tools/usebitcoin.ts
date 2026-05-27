@@ -103,7 +103,7 @@ export async function buyGiftCard(
 
   const invoice = await createInvoice(sku, 1);
 
-  const payResult = await payBolt11(invoice.bolt11, "auto", expectedSats);
+  const payResult = await payBolt11(invoice.bolt11, "cashu", expectedSats);
   if (!payResult.preimage) {
     throw new Error("Lightning payment failed — no preimage received");
   }
@@ -124,7 +124,7 @@ export async function buyGiftCard(
     amount,
     orderId: invoice.order_id,
     preimage: payResult.preimage,
-    paymentMethod: payResult.method as "cashu" | "ark",
+    paymentMethod: payResult.method,
     satsPaid: payResult.amount,
     fee: payResult.fee,
   };
@@ -141,7 +141,7 @@ export function registerUseBitcoinTools(server: McpServer): void {
   // ---- Generic multi-product tool ----
   server.tool(
     "usebitcoin_buy_gift_card",
-    "Buy a gift card on UseBitcoin.jp using Bitcoin Lightning payment (via Cashu ecash or Ark wallet). " +
+    "Buy a gift card on UseBitcoin.jp using Bitcoin Lightning payment via Cashu ecash. " +
       `Supported products: ${ALL_PRODUCT_NAMES.join(", ")}. ` +
       "Returns the gift card code, order ID, and payment details.",
     {
@@ -353,7 +353,6 @@ export function registerUseBitcoinTools(server: McpServer): void {
     },
   );
 
-  // ---- Legacy V-Preca tool (backward compatible) ----
   const VPRECA_AMOUNTS = PRODUCT_CATALOG.vpreca.amounts;
   server.tool(
     "usebitcoin_buy_vpreca",
@@ -372,7 +371,6 @@ export function registerUseBitcoinTools(server: McpServer): void {
     async ({ amount }) => {
       try {
         const result = await buyGiftCard("vpreca", amount);
-        // Legacy response format
         return {
           content: [
             {
@@ -386,7 +384,6 @@ export function registerUseBitcoinTools(server: McpServer): void {
                   expiryDate: result.expiryDate ?? "not provided",
                   orderId: result.orderId,
                   paymentPreimage: result.preimage,
-                  // deprecated fields for backward compat
                   cardNumber: result.code,
                   securityCode: result.secondaryCode ?? "",
                 },
@@ -407,7 +404,6 @@ export function registerUseBitcoinTools(server: McpServer): void {
     },
   );
 
-  // ---- Legacy DMM tool (backward compatible) ----
   const DMM_AMOUNTS = PRODUCT_CATALOG.dmm.amounts;
   server.tool(
     "usebitcoin_buy_dmm_points",
@@ -449,7 +445,6 @@ export function registerUseBitcoinTools(server: McpServer): void {
     },
   );
 
-  // ---- Legacy BitCash tool (backward compatible) ----
   const BITCASH_AMOUNTS = PRODUCT_CATALOG.bitcash.amounts;
   server.tool(
     "usebitcoin_buy_bitcash",

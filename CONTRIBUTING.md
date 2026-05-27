@@ -4,22 +4,15 @@
 
 - Node.js 20+
 - pnpm 9+
-- Git (submodules required for Ark / claw-cash support — optional at runtime but expected in development)
 
 ## Setup
 
 ```bash
-git clone --recurse-submodules https://github.com/cachet-jp/ln-agent-poc-v2.git
+git clone https://github.com/cachet-jp/ln-agent-poc-v2.git
 cd ln-agent-poc-v2/purchasing-agent
 pnpm install
-npx playwright install chromium   # Amazon / DMM / DLsite の browser automation
+npx playwright install chromium   # V-Preca inquiry browser automation
 cp .env.example .env               # Fill in USEBITCOIN_API_KEY, CASHU_MINT_URL, CASHU_STORE_KEY
-```
-
-If you cloned without `--recurse-submodules`:
-
-```bash
-git submodule update --init --recursive
 ```
 
 ## Workflow

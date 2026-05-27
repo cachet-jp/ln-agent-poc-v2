@@ -4,11 +4,9 @@ Bitcoin でギフトカード・eSIM・モバイルトップアップ・デジ�
 
 - **UseBitcoin.jp**: 国内 6 種類のギフトカード（Kyash・V-Preca・QUO カード Pay・au PAY・DMM・BitCash）
 - **Bitrefill**: 世界 180+ カ国、1,500+ ブランドのギフトカード・eSIM・モバイルトップアップ
-- **Amazon**: V-Preca 経由で Amazon ギフト残高チャージ・商品購入
-- **DMM**: ポイントコード経由でデジタルコンテンツ購入
-- **DLsite**: BitCash 経由でデジタルコンテンツ購入
+- **V-Preca inquiry**: 購入済み V-Preca カードのフル情報（カード番号・有効期限・CVV・残高）取得
 
-Cashu ecash または Ark ウォレットから Lightning 支払いで購入します。
+Cashu ecash から Lightning 支払いで購入します。
 
 ---
 
@@ -54,9 +52,7 @@ Bitrefill 経由で **1,500+ ブランド**のデジタル商品を購入可能�
 
 ## 動作モード
 
-### Cashu-only モード（推奨・かんたん）
-
-Cashu ecash トークンだけで動作します。Ark ウォレットや Lightning ノードは不要です。
+Cashu ecash トークンだけで動作します。Lightning ノードは不要です。
 
 ```
 Cashu トークン受取 → melt（Mint が Lightning を代行） → UseBitcoin / Bitrefill → ギフトコード
@@ -68,44 +64,50 @@ Cashu トークン受取 → melt（Mint が Lightning を代行） → UseBitco
 - 他のユーザーや Cashu ウォレットから `cashuB...` トークン文字列を受け取る
 - Lightning ウォレット（Phoenix, WoS 等）から `cashu_create_invoice` で直接チャージ
 
-**向いている人**: すぐ試したい・Lightning ノードを持っていない・非エンジニア
-
-### Ark + Cashu ハイブリッドモード
-
-Ark Protocol (Bitcoin L2) ウォレットをバックエンドに持ち、Cashu 残高が不足したら自動で Ark から補充します。
-
-```
-BTC (onchain) → Ark (offchain vTXO) → Cashu チャージ → melt → UseBitcoin / Bitrefill → ギフトコード
-```
-
-**追加で必要な設定**: `CLW_SESSION_TOKEN`, `CLW_IDENTITY_ID`, `CLW_PUBLIC_KEY`, `CLW_ARK_SERVER_URL`
-
-**入金方法**: Ark の boarding address に BTC を送金 → onboard で vTXO に変換
-
-**向いている人**: 継続的に大量購入したい・BTC を直接入金したい
-
 ---
 
 ## セットアップ A — MCP サーバーとして使う
 
 Claude Desktop や Claude Code から MCP ツールとして直接呼び出す方法です。
 
-### A-1. インストール
+### A-1. 前提ツール (Volta)
+
+このプロジェクトでは Node.js / pnpm のバージョン管理に [Volta](https://volta.sh/) を使うことを推奨しています。Claude Code から MCP サーバーを起動する際も `$HOME/.volta/bin` を `PATH` に通して `npx` を解決しているため (`.mcp.json` 参照)、Volta が入っていれば追加設定不要で動きます。
+
+**インストール**:
 
 ```bash
-git clone https://github.com/cachet-jp/ln-agent-poc.git
-cd ln-agent-poc/purchasing-agent
-pnpm install
-npx playwright install chromium   # 初回のみ（Amazon / DMM / DLsite 自動化で必要）
+curl https://get.volta.sh | bash
+# シェルを開き直すか、以下を実行
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
 ```
 
-### A-2. 環境変数
+**Node + pnpm を導入**:
+
+```bash
+volta install node@20      # Node 20 以上が必須 (engines.node: ">=20.0.0")
+volta install pnpm
+```
+
+リポジトリ直下に降りた時に `node -v` / `pnpm -v` がそれぞれ表示されれば OK です。Volta を使わない場合でも、Node 20+ と pnpm が `PATH` に通っていれば動作します。
+
+### A-2. インストール
+
+```bash
+git clone --recurse-submodules https://github.com/cachet-jp/ln-agent-poc-v2.git
+cd ln-agent-poc-v2/purchasing-agent
+pnpm install
+npx playwright install chromium   # 初回のみ（V-Preca 照会で必要）
+```
+
+### A-3. 環境変数
 
 ```bash
 cp .env.example .env
 ```
 
-**Cashu-only の場合**（最小構成）:
+最小構成:
 
 ```bash
 CASHU_MINT_URL=https://mint.minibits.cash/Bitcoin
@@ -119,17 +121,7 @@ USEBITCOIN_API_KEY=<UseBitcoin.jp で発行した API キー>
 
 > 暗号化キー生成: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
-**Ark + Cashu の場合**（上記に加えて）:
-
-```bash
-CLW_API_BASE_URL=https://api.clw.cash
-CLW_SESSION_TOKEN=<clw.cash のセッショントークン>
-CLW_IDENTITY_ID=<UUID>
-CLW_PUBLIC_KEY=<33-byte 圧縮公開鍵 hex>
-CLW_ARK_SERVER_URL=https://arkade.computer
-```
-
-### A-3. Claude Desktop に登録
+### A-4. Claude Desktop に登録
 
 `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -139,7 +131,7 @@ CLW_ARK_SERVER_URL=https://arkade.computer
     "purchasing-agent": {
       "command": "npx",
       "args": ["tsx", "src/server.ts"],
-      "cwd": "/path/to/ln-agent-poc/purchasing-agent"
+      "cwd": "/path/to/ln-agent-poc-v2/purchasing-agent"
     }
   }
 }
@@ -147,14 +139,14 @@ CLW_ARK_SERVER_URL=https://arkade.computer
 
 > `.env` ファイルを配置済みなら `env` フィールドは不要です。
 
-### A-4. Claude Code に登録
+### A-5. Claude Code に登録
 
 ```bash
-cd ln-agent-poc/purchasing-agent
+cd ln-agent-poc-v2/purchasing-agent
 claude mcp add purchasing-agent -- npx tsx src/server.ts
 ```
 
-### A-5. 動作確認
+### A-6. 動作確認
 
 Claude のチャットで以下を試してください:
 
@@ -173,7 +165,7 @@ Claude のチャットで以下を試してください:
 
 ### B-1. セットアップ
 
-[セットアップ A](#セットアップ-a--mcp-サーバーとして使う) の A-1 〜 A-4 を完了してください。
+[セットアップ A](#セットアップ-a--mcp-サーバーとして使う) の A-1 〜 A-5 を完了してください。
 
 SKILL ファイルはリポジトリの `.claude/commands/` に含まれているため、Claude Code でこのリポジトリを開くと自動で認識されます。
 
@@ -213,14 +205,13 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 → 「Amazon Japan の ¥100 ギフトカード」
 ```
 
-**V-Preca のカード番号を取得して Amazon にチャージ:**
+**V-Preca のカード番号を取得:**
 
 ```
 > /vpreca-inquiry
 → 「ギフトコード: GkMPMzZcAHus4F1、下4桁: 1234」
 → （カード番号・有効期限・CVV・残高が表示される）
-→ 「Amazon にチャージしたい」
-→ amazon_charge_vpreca を実行してチャージ完了
+→ そのまま EC サイトのネット決済で利用
 ```
 
 ### B-4. 別プロジェクトから SKILL だけ使う
@@ -229,11 +220,11 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 
 ```bash
 # SKILL ファイルをコピー
-cp -r ln-agent-poc/.claude/commands/ your-project/.claude/commands/
+cp -r ln-agent-poc-v2/.claude/commands/ your-project/.claude/commands/
 
 # MCP サーバーはグローバル設定で登録
 claude mcp add --scope user purchasing-agent -- \
-  npx tsx /path/to/ln-agent-poc/purchasing-agent/src/server.ts
+  npx tsx /path/to/ln-agent-poc-v2/purchasing-agent/src/server.ts
 ```
 
 ---
@@ -316,10 +307,10 @@ Bitrefill 公式の MCP サーバー（`bitrefill-mcp-server`）を **別の MCP
 
 | | 公式 MCP サーバー | カスタム purchasing-agent |
 |---|---|---|
-| 支払い方法 | Bitrefill **アカウント残高** | **Cashu ecash / Ark** (Lightning) |
+| 支払い方法 | Bitrefill **アカウント残高** | **Cashu ecash** (Lightning) |
 | 事前入金 | Bitrefill アカウントに BTC/crypto を入金 | Cashu ウォレットに ecash をチャージ |
 | 購入フロー | `create_invoice` → `pay_invoice` | `bitrefill_buy`（全自動） |
-| メリット | 公式サポート、注文管理機能が豊富 | Cashu/Ark との統合、入金不要 |
+| メリット | 公式サポート、注文管理機能が豊富 | Cashu との統合、入金不要 |
 
 ---
 
@@ -358,7 +349,7 @@ bitrefill list-orders --include_redemption_info true
 
 > CLI が返す Lightning invoice を Cashu で支払うには、ヘルパースクリプトを使います:
 > ```bash
-> npx tsx scripts/cashu-pay-bolt11.ts <bolt11_invoice>
+> npx tsx purchasing-agent/scripts/cashu-pay-bolt11.ts <bolt11_invoice>
 > ```
 
 ---
@@ -383,7 +374,8 @@ bitrefill list-orders --include_redemption_info true
 |--------|------|
 | `usebitcoin_buy_gift_card` | ギフトカード購入（product + amount を指定） |
 | `usebitcoin_list_products` | 商品カタログ一覧 |
-| `usebitcoin_buy_vpreca` | V-Preca 購入（レガシー互換） |
+| `usebitcoin_create_invoice_qr` | Lightning invoice + QR コードを取得（手動支払い） |
+| `usebitcoin_wait_for_fulfillment` | 注文の完了を待ってコードを取得 |
 | `vpreca_inquiry` | V-Preca ギフト照会（ギフトコード + カード下4桁 → フルカード情報取得） |
 
 #### V-Preca カード照会
@@ -410,7 +402,7 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 }
 ```
 
-**ワークフロー例（V-Preca で Amazon にチャージ）**
+**ワークフロー例**
 
 ```
 1. usebitcoin_buy_gift_card(product: "vpreca", amount: 500)
@@ -419,8 +411,7 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 2. vpreca_inquiry(giftCode: "GkMPMzZcAHus4F1", cardLast4: "1234")
    → { cardNumber: "4444...", expiryDate: "10/28", securityCode: "917", balance: 500 }
 
-3. amazon_charge_vpreca(cardNumber: "4444...", expiryDate: "10/28", securityCode: "917")
-   → Amazon ギフト残高に 500 円チャージ完了
+3. EC サイトのネット決済でフルカード情報を利用
 ```
 
 ### Bitrefill 購入（要 `BITREFILL_API_KEY`）
@@ -430,87 +421,40 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 | `bitrefill_search` | 商品検索（商品名・国・カテゴリで絞り込み） |
 | `bitrefill_product_detail` | 商品詳細（金額・パッケージ・引き換え方法） |
 | `bitrefill_categories` | カテゴリ一覧取得 |
-| `bitrefill_buy` | 購入実行（Lightning invoice → Cashu/Ark 支払い → コード取得） |
+| `bitrefill_buy` | 購入実行（Lightning invoice → Cashu 支払い → コード取得） |
 | `bitrefill_order_status` | 注文ステータス確認 |
 | `bitrefill_account_balance` | Bitrefill アカウント残高確認 |
 
 ### Cashu ウォレット
 
-| ツール | 説明 | モード |
-|--------|------|--------|
-| `cashu_get_balance` | ecash 残高確認 | Cashu-only / Hybrid |
-| `cashu_create_invoice` | Lightning invoice 発行（QR コード付き）で入金 | Cashu-only / Hybrid |
-| `cashu_claim_invoice` | 支払い済み invoice から ecash を受け取り | Cashu-only / Hybrid |
-| `cashu_receive_tokens` | Cashu トークン受取 | Cashu-only / Hybrid |
-| `cashu_send_tokens` | Cashu トークン送信（トークン文字列を生成） | Cashu-only / Hybrid |
-| `cashu_melt_tokens` | Lightning invoice を ecash で支払い | Cashu-only / Hybrid |
-| `cashu_mint_tokens` | Ark → Cashu チャージ | Hybrid のみ |
-| `cashu_check_proofs` | proof の有効性チェック・spent 自動削除 | Cashu-only / Hybrid |
-| `cashu_get_mint_info` | Cashu Mint のメタ情報 | Cashu-only / Hybrid |
-
-### Amazon 購入（要 `AMAZON_EMAIL` + `AMAZON_PASSWORD`）
-
 | ツール | 説明 |
 |--------|------|
-| `amazon_create_account` | Amazon アカウント作成（半自動・Anti-Detection 対応） |
-| `amazon_continue` | アカウント作成フローの次ステップ（OTP/CAPTCHA 入力等） |
-| `amazon_session_screenshot` | 現在のブラウザセッションのスクリーンショット取得 |
-| `amazon_session_close` | ブラウザセッションを閉じる |
-| `amazon_save_session` | セッション Cookie を保存 |
-| `amazon_check_session` | 保存済みセッションの有効性確認 |
-| `amazon_login` | Amazon にログイン（Cookie またはクレデンシャル） |
-| `amazon_charge_vpreca` | V-Preca でAmazon ギフト残高をチャージ |
-| `amazon_purchase` | Amazon で商品を購入 |
-
-### DMM 購入（要 `DMM_EMAIL` + `DMM_PASSWORD`）
-
-| ツール | 説明 |
-|--------|------|
-| `dmm_create_account` | DMM アカウント作成（半自動） |
-| `dmm_login` | DMM.com にログイン |
-| `dmm_charge_points` | UseBitcoin の DMM ポイントコードでチャージ |
-| `dmm_purchase` | DMM デジタルコンテンツを購入 |
-
-### DLsite 購入（要 `DLSITE_EMAIL` + `DLSITE_PASSWORD`）
-
-| ツール | 説明 |
-|--------|------|
-| `dlsite_create_account` | DLsite アカウント作成（半自動） |
-| `dlsite_login` | DLsite.com にログイン |
-| `dlsite_purchase` | DLsite デジタルコンテンツを BitCash で購入 |
-
-### Ark ウォレット（Hybrid モードのみ）
-
-| ツール | 説明 |
-|--------|------|
-| `ark_get_balance` | Ark 残高（offchain vTXO + onchain） |
-| `ark_get_address` | 入金アドレス（Ark address / boarding address） |
-| `ark_create_invoice` | Lightning invoice 作成（Boltz reverse swap） |
-| `ark_pay_invoice` | Lightning 支払い（Boltz submarine swap） |
-| `ark_onboard` | boarding UTXO → offchain vTXO 変換 |
-
----
+| `cashu_get_balance` | ecash 残高確認 |
+| `cashu_create_invoice` | Lightning invoice 発行（QR コード付き）で入金 |
+| `cashu_claim_invoice` | 支払い済み invoice から ecash を受け取り |
+| `cashu_receive_tokens` | Cashu トークン受取 |
+| `cashu_send_tokens` | Cashu トークン送信（トークン文字列を生成） |
+| `cashu_melt_tokens` | Lightning invoice を ecash で支払い |
+| `cashu_check_proofs` | proof の有効性チェック・spent 自動削除 |
+| `cashu_get_mint_info` | Cashu Mint のメタ情報 |
 
 ## 環境変数リファレンス
 
-### Cashu（Cashu-only で必須）
+### Cashu（必須）
 
 | 変数 | 必須 | デフォルト | 説明 |
 |------|:----:|-----------|------|
 | `CASHU_MINT_URL` | ✅ | — | Cashu Mint の URL |
-| `CASHU_STORE_KEY` | — | CLW token から導出 | proof 暗号化キー（64 文字 hex） |
+| `CASHU_STORE_KEY` | — | — | proof 暗号化キー（64 文字 hex） |
 | `CASHU_MAX_BALANCE_SATS` | — | `1000000` | ecash 最大保有量（sats） |
 | `CASHU_PREFERRED` | — | `true` | Cashu を優先支払い手段にする |
 
-### Ark（Hybrid モードで必要）
+### UseBitcoin.jp（UseBitcoin 購入で必要）
 
 | 変数 | 必須 | デフォルト | 説明 |
 |------|:----:|-----------|------|
-| `CLW_API_BASE_URL` | — | `https://api.clw.cash` | CLW API エンドポイント |
-| `CLW_SESSION_TOKEN` | — | — | clw.cash セッショントークン |
-| `CLW_IDENTITY_ID` | — | — | ウォレット identity UUID |
-| `CLW_PUBLIC_KEY` | — | — | 33-byte 圧縮公開鍵 hex |
-| `CLW_ARK_SERVER_URL` | — | — | Ark サーバー URL |
+| `USEBITCOIN_API_KEY` | — | — | UseBitcoin.jp で発行した API キー |
+| `USEBITCOIN_API_BASE_URL` | — | `https://usebitcoin.jp/api/v1` | API ベース URL（上書き用） |
 
 ### Bitrefill（Bitrefill 購入で必要）
 
@@ -520,33 +464,12 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 | `BITREFILL_API_ID` | — | — | 公式 MCP サーバー用 ID（`API_KEY` と同じ値で OK） |
 | `BITREFILL_API_SECRET` | — | — | 公式 MCP サーバー用 SECRET（`API_KEY` と同じ値で OK） |
 
-### Amazon（Amazon 購入で必要）
-
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `AMAZON_EMAIL` | — | — | Amazon アカウントのメールアドレス |
-| `AMAZON_PASSWORD` | — | — | Amazon アカウントのパスワード |
-
-### DMM（DMM 購入で必要）
-
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `DMM_EMAIL` | — | — | DMM アカウントのメールアドレス |
-| `DMM_PASSWORD` | — | — | DMM アカウントのパスワード |
-
-### DLsite（DLsite 購入で必要）
-
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `DLSITE_EMAIL` | — | — | DLsite アカウントのメールアドレス |
-| `DLSITE_PASSWORD` | — | — | DLsite アカウントのパスワード |
-
 ### 共通
 
 | 変数 | 必須 | デフォルト | 説明 |
 |------|:----:|-----------|------|
 | `MAX_SPEND_JPY` | — | `5000` | 1 回の購入上限（JPY） |
-| `HEADLESS` | — | `true` | Playwright headless モード |
+| `HEADLESS` | — | `true` | Playwright headless モード（V-Preca inquiry で利用） |
 
 ---
 
@@ -555,23 +478,14 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 ### 支払いフロー
 
 ```
-[UseBitcoin — Cashu-only]
+[UseBitcoin]
   Cashu ecash → melt → Cashu Mint が Lightning 代行 → UseBitcoin → ギフトコード
 
-[UseBitcoin — Hybrid]
-  BTC (onchain) → Ark vTXO → Cashu チャージ → melt → Mint が Lightning 代行 → UseBitcoin → ギフトコード
+[Bitrefill]
+  Cashu ecash → melt → Cashu Mint が Lightning 代行 → Bitrefill CLI → ギフトコード/eSIM
 
-[Bitrefill — Cashu + CLI]
-  Cashu ecash → melt → Mint が Lightning 代行 → Bitrefill CLI → ギフトコード/eSIM
-
-[Amazon — V-Preca 経由]
-  UseBitcoin で V-Preca 購入 → vpreca_inquiry でフルカード取得 → Amazon ギフト残高チャージ → 商品購入
-
-[DMM — ポイントコード経由]
-  UseBitcoin で DMM ポイント購入 → DMM にチャージ → デジタルコンテンツ購入
-
-[DLsite — BitCash 経由]
-  UseBitcoin で BitCash 購入 → DLsite で BitCash 支払い → デジタルコンテンツ購入
+[V-Preca inquiry]
+  UseBitcoin で V-Preca 購入 → vpreca_inquiry (Playwright で Lifecard 照会) → フルカード情報
 ```
 
 ### システム構成
@@ -587,26 +501,21 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 │ purchasing-agent  (MCP Server)                       │
 │                                                      │
 │  Cashu Wallet ─── Payment Strategy ─── UseBitcoin    │
-│  (cashu-*.ts)     (auto: cashu→ark)    (usebitcoin)  │
-│                         │                            │
-│  Ark Wallet ────────────┘  (optional)                │
-│  (clw-client.ts)                                     │
+│  (cashu-*.ts)     (cashu melt)         (usebitcoin)  │
 │                                                      │
 │  Bitrefill Client ──── @bitrefill/cli                │
-│  (bitrefill-client.ts)  (MCP API wrapper)            │
+│  (bitrefill-client.ts)                               │
 │                                                      │
 │  UseBitcoin API Client (fetch)                       │
 │  (usebitcoin-api.ts)                                 │
 │                                                      │
-│  Amazon / DMM / DLsite  (Playwright 自動化)          │
 │  V-Preca Inquiry  (Lifecard 照会ページ)              │
-│                                                      │
 │  Playwright  (headless Chrome)                       │
-└──────┬──────────┬──────────┬──────────┬──────────────┘
-       │          │          │          │
-       ▼          ▼          ▼          ▼
-  Cashu Mint  UseBitcoin  Bitrefill  Amazon/DMM/DLsite
-  (Lightning)  (国内ギフト) (世界1500+) (EC/デジタル)
+└──────┬──────────┬──────────┬─────────────────────────┘
+       │          │          │
+       ▼          ▼          ▼
+  Cashu Mint  UseBitcoin  Bitrefill
+  (Lightning)  (国内ギフト) (世界1500+)
 ```
 
 ### 技術スタック
@@ -615,9 +524,8 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 |---|---|
 | MCP | `@modelcontextprotocol/sdk` — stdio transport |
 | Cashu | `@cashu/cashu-ts` — NUT-04/05/06/07/11/12 |
-| Ark | `@arkade-os/sdk` + Boltz swap（オプション） |
 | Bitrefill | `@bitrefill/cli` — MCP API ラッパー |
-| ブラウザ | Playwright headless Chrome |
+| ブラウザ | Playwright headless Chrome（V-Preca 照会のみ） |
 | 設定 | zod validation + dotenv |
 | 暗号化 | AES-256-GCM（proof ストレージ） |
 
@@ -625,7 +533,10 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 
 ## 開発
 
+以下はすべて `purchasing-agent/` ディレクトリ内で実行してください。
+
 ```bash
+cd purchasing-agent
 pnpm install
 pnpm dev          # tsx watch mode
 pnpm build        # TypeScript compile
@@ -652,3 +563,9 @@ npx tsx scripts/cashu-pay-bolt11.ts <bolt11>
 # Bitrefill E2E 購入テスト
 npx tsx scripts/test-bitrefill-buy.ts
 ```
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

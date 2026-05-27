@@ -1,6 +1,6 @@
 # /auto-purchase - BTC でギフトカードを購入
 
-Cashu ecash または Ark ウォレットの BTC を使って、Lightning 支払いでギフトカードを自動購入します。
+Cashu ecash の BTC を使って、Lightning 支払いでギフトカードを自動購入します。
 
 ## Instructions
 
@@ -16,7 +16,7 @@ Cashu ecash または Ark ウォレットの BTC を使って、Lightning 支払
 
 以下のステップを自動で実行します:
 
-1. ウォレット残高確認（Cashu / Ark）
+1. Cashu 残高確認
 2. 商品と金額を選択
 3. UseBitcoin.jp で Lightning 支払い
 4. ギフトコード取得
@@ -43,13 +43,11 @@ Cashu ecash または Ark ウォレットの BTC を使って、Lightning 支払
 #### 2a. 残高確認
 
 1. `cashu_get_balance` で Cashu ecash 残高を確認
-2. Ark が利用可能なら `ark_get_balance` も確認
-3. 残高が 0 の場合は入金方法を案内して中断
+2. 残高が 0 の場合は入金方法を案内して中断 (`cashu_create_invoice` → 外部 LN ウォレットで支払い → `cashu_claim_invoice`)
 
 ```
 ウォレット残高:
-  Cashu:    XX,XXX sats (0.000XXXXX BTC)
-  Ark:      XX,XXX sats (利用可能な場合)
+  Cashu: XX,XXX sats (0.000XXXXX BTC)
 ```
 
 #### 2b. 商品選択
@@ -89,7 +87,7 @@ Cashu ecash または Ark ウォレットの BTC を使って、Lightning 支払
 
 - 各ステップでエラーが発生した場合は即座に中断し、エラー内容を日本語で報告
 - 「リトライしますか？」と確認してから再実行
-- Cashu 残高不足時は Cashu トークン受取 or Ark からのチャージを提案
+- Cashu 残高不足時は `cashu_create_invoice` で Lightning invoice を発行し、外部 LN ウォレット (Phoenix, Wallet of Satoshi 等) で支払う方法を案内
 
 ## Prerequisites
 
