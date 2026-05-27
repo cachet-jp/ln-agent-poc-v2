@@ -14,14 +14,22 @@ const instructions = `Bitcoin Lightning でギフトカード等を購入する 
 - /auto-purchase — 自動購入フロー
 
 ## 主なツール（カテゴリ別）
-- Cashu ecash ウォレット: cashu_get_balance / cashu_create_invoice (QR つき) /
-  cashu_claim_invoice / cashu_send_tokens (QR つき) /
+- Cashu ecash ウォレット: cashu_get_balance / cashu_create_invoice /
+  cashu_claim_invoice / cashu_send_tokens /
   cashu_receive_tokens / cashu_melt_tokens / cashu_check_proofs / cashu_get_mint_info
 - UseBitcoin (国内ギフトカード): usebitcoin_list_products / usebitcoin_buy_gift_card /
   usebitcoin_create_invoice_qr / usebitcoin_wait_for_fulfillment
 - Bitrefill (世界 1,500+ ブランド): bitrefill_search / bitrefill_product_detail /
   bitrefill_categories / bitrefill_buy / bitrefill_order_status / bitrefill_account_balance
 - V-Preca: vpreca_inquiry
+- 共通: render_qr (BOLT11 / Cashu トークン等を端末スキャン可能な QR に変換)
+
+## QR コードを user に見せたいとき
+ターミナルクライアントは MCP の image content を必ずしも inline 描画しない。
+**BOLT11 invoice や Cashu トークンを user に scan させたいときは、必ず render_qr
+を別途呼び出し、返ってきた最初のコードブロックを verbatim でレスポンスに含めること。**
+cashu_create_invoice や cashu_send_tokens の image だけに頼ると、ユーザー側で QR が
+見えないケースがある。
 
 ## よくあるユースケース例
 - 「1000 sats 入金用の Lightning invoice を作りたい」
@@ -63,6 +71,11 @@ if (config.CASHU_MINT_URL) {
 {
   const { registerBitrefillTools } = await import("./tools/bitrefill.js");
   registerBitrefillTools(server);
+}
+
+{
+  const { registerQrTools } = await import("./tools/qr.js");
+  registerQrTools(server);
 }
 
 const transport = new StdioServerTransport();
