@@ -203,7 +203,9 @@ export function registerCashuTools(server: McpServer): void {
                     "Pay this Lightning invoice from any wallet. " +
                     "**Important**: to display the QR to the user, call render_qr with this bolt11 — " +
                     "the image content alone is not rendered inline by every MCP client. " +
-                    "After payment, call cashu_claim_invoice with the quoteId to claim your ecash.",
+                    "After showing the QR, call cashu_wait_for_invoice_paid with this quoteId to " +
+                    "automatically detect payment and claim the ecash (no manual cashu_claim_invoice " +
+                    "needed). If you only want a single-shot check, use cashu_claim_invoice.",
                 },
                 null,
                 2,
@@ -254,6 +256,71 @@ export function registerCashuTools(server: McpServer): void {
           state: result.state,
           amount: formatSats(result.amount),
           message: "Ecash claimed and added to your Cashu wallet!",
+        };
+      }),
+  );
+
+  // ---- cashu_wait_for_invoice_paid ----
+  server.tool(
+    "cashu_wait_for_invoice_paid",
+    "Poll the Cashu mint until the invoice from cashu_create_invoice is paid, then claim the " +
+      "ecash automatically. Returns once the payment is detected and proofs are added to the " +
+      "wallet (with the new balance), or returns timedOut: true after timeoutSec seconds. " +
+      "Idempotent — safe to call alongside cashu_claim_invoice. Use this after sharing the QR " +
+      "with the user so the workflow continues without manual polling.",
+    {
+      quoteId: z.string().describe("The quote ID returned by cashu_create_invoice"),
+      amount: z.number().positive().describe("The amount in sats (same as cashu_create_invoice)"),
+      timeoutSec: z
+        .number()
+        .int()
+        .positive()
+        .max(1800)
+        .default(300)
+        .describe("Max wait time in seconds (default 300 = 5 min, max 1800 = 30 min)"),
+      pollIntervalSec: z
+        .number()
+        .int()
+        .positive()
+        .max(60)
+        .default(3)
+        .describe("How often to poll the mint, in seconds (default 3, max 60)"),
+    },
+    async ({ quoteId, amount, timeoutSec, pollIntervalSec }) =>
+      withErrorHandler(async () => {
+        const started = Date.now();
+        const deadline = started + timeoutSec * 1000;
+        let lastState = "UNKNOWN";
+        let attempts = 0;
+        while (Date.now() < deadline) {
+          attempts += 1;
+          const result = await claimMintInvoice(quoteId, amount);
+          lastState = result.state;
+          if (result.claimed) {
+            const balance = await getCashuBalance();
+            return {
+              success: true,
+              claimed: true,
+              state: result.state,
+              amount: formatSats(result.amount),
+              newBalance: formatSats(balance.total),
+              elapsedSec: Math.round((Date.now() - started) / 1000),
+              pollAttempts: attempts,
+              message: "Invoice paid and ecash claimed.",
+            };
+          }
+          await new Promise((r) => setTimeout(r, pollIntervalSec * 1000));
+        }
+        return {
+          success: false,
+          claimed: false,
+          state: lastState,
+          timedOut: true,
+          elapsedSec: timeoutSec,
+          pollAttempts: attempts,
+          message:
+            `Timed out after ${timeoutSec}s with state=${lastState}. ` +
+            "If the invoice was paid later, call cashu_claim_invoice with the same quoteId to claim.",
         };
       }),
   );

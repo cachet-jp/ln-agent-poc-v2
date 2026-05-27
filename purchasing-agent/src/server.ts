@@ -15,8 +15,9 @@ const instructions = `Bitcoin Lightning でギフトカード等を購入する 
 
 ## 主なツール（カテゴリ別）
 - Cashu ecash ウォレット: cashu_get_balance / cashu_create_invoice /
-  cashu_claim_invoice / cashu_send_tokens /
-  cashu_receive_tokens / cashu_melt_tokens / cashu_check_proofs / cashu_get_mint_info
+  cashu_claim_invoice / cashu_wait_for_invoice_paid (自動着金検知) /
+  cashu_send_tokens / cashu_receive_tokens / cashu_melt_tokens /
+  cashu_check_proofs / cashu_get_mint_info
 - UseBitcoin (国内ギフトカード): usebitcoin_list_products / usebitcoin_buy_gift_card /
   usebitcoin_create_invoice_qr / usebitcoin_wait_for_fulfillment
 - Bitrefill (世界 1,500+ ブランド): bitrefill_search / bitrefill_product_detail /
@@ -32,12 +33,17 @@ cashu_create_invoice や cashu_send_tokens の image だけに頼ると、ユー
 見えないケースがある。
 
 ## よくあるユースケース例
-- 「1000 sats 入金用の Lightning invoice を作りたい」
-  → cashu_create_invoice { amount: 1000 } で BOLT11 と QR が返ります
+- 「1000 sats 入金して、それで V-Preca 買って」
+  1. cashu_get_balance で現状確認 → 不足額を計算
+  2. cashu_create_invoice { amount: <不足分> } で BOLT11 / quoteId を取得
+  3. render_qr { text: bolt11 } を呼び、返ってきた ASCII を verbatim でユーザーに表示
+  4. cashu_wait_for_invoice_paid { quoteId, amount } で着金まで自動待機
+  5. 着金後 usebitcoin_buy_gift_card { product, amount } で購入
+     残高が足りない場合は payBolt11 段階で "Insufficient Cashu balance" エラーが返る
+- 「1000 sats 入金用の invoice だけ作って」
+  → cashu_create_invoice → render_qr → cashu_wait_for_invoice_paid（自動着金まで）
 - 「Cashu のトークンを誰かに送りたい」
-  → cashu_send_tokens { amount: <sats> }（QR + トークン文字列）
-- 「Amazon ギフト残高を Bitcoin で買いたい」
-  → /bitrefill-purchase または usebitcoin_buy_gift_card
+  → cashu_send_tokens { amount: <sats> } → render_qr { text: token } で QR を表示
 - 「V-Preca カードの残高を確認したい」
   → vpreca_inquiry
 
