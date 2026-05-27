@@ -275,7 +275,10 @@ export function registerUseBitcoinTools(server: McpServer): void {
                   bolt11: invoice.bolt11,
                   expiresAt: invoice.expires_at,
                   qrPath: pngPath,
-                  nextStep: `Pay the invoice, then call usebitcoin_wait_for_fulfillment with orderId="${invoice.order_id}".`,
+                  nextStep:
+                    `**Important**: to display the QR to the user, call render_qr with this bolt11 — ` +
+                    `the image content alone is not rendered inline by every MCP client. ` +
+                    `Pay the invoice, then call usebitcoin_wait_for_fulfillment with orderId="${invoice.order_id}".`,
                 },
                 null,
                 2,
