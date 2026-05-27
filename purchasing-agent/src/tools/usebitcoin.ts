@@ -353,4 +353,136 @@ export function registerUseBitcoinTools(server: McpServer): void {
     },
   );
 
+  const VPRECA_AMOUNTS = PRODUCT_CATALOG.vpreca.amounts;
+  server.tool(
+    "usebitcoin_buy_vpreca",
+    "Buy a V-Preca gift card on UseBitcoin.jp using Lightning payment. " +
+      "Returns card number and security code. " +
+      `Valid amounts (JPY): ${VPRECA_AMOUNTS.join(", ")}`,
+    {
+      amount: z
+        .number()
+        .int()
+        .refine((v) => VPRECA_AMOUNTS.includes(v), {
+          message: `Amount must be one of: ${VPRECA_AMOUNTS.join(", ")}`,
+        })
+        .describe(`V-Preca amount in JPY. Valid: ${VPRECA_AMOUNTS.join(", ")}`),
+    },
+    async ({ amount }) => {
+      try {
+        const result = await buyGiftCard("vpreca", amount);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  voucherCode: result.code,
+                  cardLast4: result.secondaryCode ?? "",
+                  amount: result.amount,
+                  expiryDate: result.expiryDate ?? "not provided",
+                  orderId: result.orderId,
+                  paymentPreimage: result.preimage,
+                  cardNumber: result.code,
+                  securityCode: result.secondaryCode ?? "",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text" as const, text: `V-Preca purchase failed: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  const DMM_AMOUNTS = PRODUCT_CATALOG.dmm.amounts;
+  server.tool(
+    "usebitcoin_buy_dmm_points",
+    "Buy a DMM point code on UseBitcoin.jp using Lightning payment (8% discount). " +
+      "Returns the point code string to charge on DMM.com. " +
+      `Valid amounts (JPY): ${DMM_AMOUNTS.join(", ")}`,
+    {
+      amount: z
+        .number()
+        .int()
+        .refine((v) => DMM_AMOUNTS.includes(v), {
+          message: `Amount must be one of: ${DMM_AMOUNTS.join(", ")}`,
+        })
+        .describe(`DMM point code amount in JPY. Valid: ${DMM_AMOUNTS.join(", ")}`),
+    },
+    async ({ amount }) => {
+      try {
+        const result = await buyGiftCard("dmm", amount);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                { success: true, code: result.code, amount: result.amount, orderId: result.orderId },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text" as const, text: `DMM point code purchase failed: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  const BITCASH_AMOUNTS = PRODUCT_CATALOG.bitcash.amounts;
+  server.tool(
+    "usebitcoin_buy_bitcash",
+    "Buy a BitCash code on UseBitcoin.jp using Lightning payment. " +
+      "Returns the BitCash hiragana ID for use on DLsite, Niconico, etc. " +
+      `Valid amounts (JPY): ${BITCASH_AMOUNTS.join(", ")}`,
+    {
+      amount: z
+        .number()
+        .int()
+        .refine((v) => BITCASH_AMOUNTS.includes(v), {
+          message: `Amount must be one of: ${BITCASH_AMOUNTS.join(", ")}`,
+        })
+        .describe(`BitCash amount in JPY. Valid: ${BITCASH_AMOUNTS.join(", ")}`),
+    },
+    async ({ amount }) => {
+      try {
+        const result = await buyGiftCard("bitcash", amount);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                { success: true, hiraganaId: result.code, amount: result.amount, orderId: result.orderId },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text" as const, text: `BitCash purchase failed: ${(err as Error).message}` },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
 }
