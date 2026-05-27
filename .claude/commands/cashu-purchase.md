@@ -19,14 +19,13 @@ Bitcoin (Cashu ecash) で日本のギフトカードを即座に購入できま�
 1. `cashu_get_balance` で Cashu ecash 残高を確認
 2. 残高が不足している場合:
    - Cashu トークンを受け取る（`cashu_receive_tokens` — ユーザーにトークン文字列を貼ってもらう）
-   - または Ark 残高から補充（`ark_get_balance` → `cashu_mint_tokens`）
-3. 両方不足なら入金方法を案内
+   - または `cashu_create_invoice` で Lightning invoice を発行し、外部 LN ウォレット (Phoenix, Wallet of Satoshi 等) で支払い → `cashu_claim_invoice` で ecash を受領
 
 ### Step 3: Cashu チャージ（必要な場合）
 
 Cashu 残高が不足している場合:
 1. 必要額を計算（購入金額の BTC 換算 + 手数料余裕 20%）
-2. ユーザーから Cashu トークンを受け取るか、`cashu_mint_tokens` で Ark → Cashu にチャージ
+2. `cashu_create_invoice` で Lightning invoice を発行し、外部 LN ウォレットで支払う、または `cashu_receive_tokens` でトークンを受け取る
 3. `cashu_get_balance` でチャージ完了を確認
 
 ### Step 4: 購入実行
@@ -58,7 +57,7 @@ Cashu 残高が不足している場合:
 
 ## エラー時の対応
 
-- **Cashu 残高不足**: トークン受取 or Ark からチャージを提案
-- **Mint 到達不可**: Ark 直接支払いにフォールバック
+- **Cashu 残高不足**: トークン受取 or `cashu_create_invoice` での invoice 発行を提案
+- **Mint 到達不可**: 別の Cashu mint を試すか、サービス復旧を待つよう案内
 - **支払い上限超過**: MAX_SPEND_JPY の値を確認するよう案内
 - **コード抽出失敗**: スクリーンショットを確認し手動対応を案内

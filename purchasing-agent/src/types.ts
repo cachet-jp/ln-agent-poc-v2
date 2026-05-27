@@ -1,26 +1,3 @@
-/** Ark wallet balance */
-export interface ArkBalance {
-  /** Off-chain (vTXO) balance in sats */
-  offchain: number;
-  /** On-chain balance in sats */
-  onchain: number;
-}
-
-/** Ark receive addresses */
-export interface ArkAddresses {
-  /** Ark off-chain address */
-  arkAddress: string;
-  /** On-chain boarding address */
-  boardingAddress: string;
-}
-
-/** Lightning payment result */
-export interface PayInvoiceResult {
-  success: boolean;
-  preimage?: string;
-  error?: string;
-}
-
 /** V-Preca gift code from UseBitcoin */
 export interface VPrecaCode {
   /** Voucher code (alphanumeric, e.g. "GkMPMzZcAHus4F1") */
@@ -72,7 +49,7 @@ export interface GiftCardResult {
   /** Lightning payment preimage */
   preimage: string;
   /** Payment method used */
-  paymentMethod: "cashu" | "ark" | "auto";
+  paymentMethod: "cashu";
   /** Sats paid */
   satsPaid: number;
   /** Fee in sats */
@@ -81,65 +58,10 @@ export interface GiftCardResult {
   expiryDate?: string;
 }
 
-/** Amazon purchase result */
-export interface AmazonPurchaseResult {
-  orderId: string;
-  itemName: string;
-  totalAmount: string;
-}
-
-/** Amazon account creation page states */
-export type AmazonPageState =
-  | "registration_form"
-  | "captcha"
-  | "puzzle"
-  | "email_otp"
-  | "sms_otp"
-  | "success"
-  | "error"
-  | "unknown";
-
-/** Result returned by Amazon account creation flow tools */
-export interface AmazonAccountFlowResult {
-  step: AmazonPageState;
-  message: string;
-  credentials?: { email: string; password: string };
-}
-
 /** UseBitcoin purchase result (common to all products) */
 export interface UseBitcoinOrderResult {
   orderId: string;
   orderPageUrl: string;
-}
-
-/** DMM point code from UseBitcoin */
-export interface DmmPointCode {
-  /** Point code string */
-  code: string;
-  /** Amount in JPY */
-  amount: number;
-}
-
-/** BitCash code from UseBitcoin */
-export interface BitCashCode {
-  /** BitCash hiragana ID */
-  hiraganaId: string;
-  /** Amount in JPY */
-  amount: number;
-}
-
-/** DMM purchase result */
-export interface DmmPurchaseResult {
-  title: string;
-  pointsUsed: number;
-  remainingPoints: number;
-}
-
-/** DLsite purchase result */
-export interface DlsitePurchaseResult {
-  title: string;
-  paymentMethod: string;
-  totalAmount: string;
 }
 
 /** V-Preca card details retrieved from Lifecard inquiry page */
@@ -249,7 +171,7 @@ export interface BitrefillPurchaseResult {
   /** Lightning payment preimage */
   preimage: string;
   /** Payment method used */
-  paymentMethod: "cashu" | "ark" | "auto";
+  paymentMethod: "cashu";
   /** Sats paid */
   satsPaid: number;
   /** Fee in sats */

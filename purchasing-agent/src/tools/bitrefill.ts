@@ -24,9 +24,41 @@ import type { BitrefillPurchaseResult } from "../types.js";
  *
  * Internally wraps @bitrefill/cli which uses the Bitrefill MCP API.
  */
+const BITREFILL_REGISTRATION_URL = "https://www.bitrefill.com/account/developers";
+
 export function registerBitrefillTools(server: McpServer): void {
   if (!hasBitrefillCredentials()) {
-    return; // No credentials — skip all Bitrefill tools
+    server.tool(
+      "bitrefill_setup_guide",
+      "Bitrefill is not yet configured. Call this tool to get instructions for enabling Bitrefill tools (gift cards, eSIMs, mobile topups, etc.) by registering an API key.",
+      {},
+      async () => ({
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                status: "not_configured",
+                message:
+                  "Bitrefill の API キーがまだ設定されていません。" +
+                  "Bitrefill ツール（ギフトカード / eSIM / モバイルトップアップ等）を使うには、" +
+                  "下記の手順で API キーを設定してください。",
+                steps: [
+                  `1. API キーを取得: ${BITREFILL_REGISTRATION_URL}`,
+                  "2. purchasing-agent/.env に追加: BITREFILL_API_KEY=<取得したキー>",
+                  "3. MCP サーバを再起動（または client から再接続）",
+                ],
+                registration_url: BITREFILL_REGISTRATION_URL,
+                env_var: "BITREFILL_API_KEY",
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }),
+    );
+    return;
   }
 
   // ---- Search ----
@@ -120,7 +152,7 @@ export function registerBitrefillTools(server: McpServer): void {
           // of the invoice; full vendor compromise needs an external oracle).
           const payResult = await payBolt11(
             invoice.lightningInvoice,
-            "auto",
+            "cashu",
             invoice.satoshiPrice,
           );
           if (!payResult.preimage) {
@@ -140,7 +172,7 @@ export function registerBitrefillTools(server: McpServer): void {
             pin: firstItem?.pin,
             orderId,
             preimage: payResult.preimage,
-            paymentMethod: payResult.method as "cashu" | "ark",
+            paymentMethod: payResult.method,
             satsPaid: invoice.satoshiPrice,
             fee: payResult.fee,
           };
