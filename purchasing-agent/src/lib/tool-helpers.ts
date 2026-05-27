@@ -71,6 +71,6 @@ export async function withErrorHandler<T>(
     const data = await handler();
     return jsonResponse(data);
   } catch (err) {
-    return errorResponse(`Error: ${(err as Error).message}`);
+    return errorResponse(`Error: ${(err as Error)?.message}`);
   }
 }
