@@ -11,6 +11,7 @@ import {
   pollOrderUntilComplete,
   extractCodesFromOrder,
 } from "../lib/usebitcoin-api.js";
+import { VPRECA_TERMS_URL, VPRECA_TERMS_NOTICE } from "../lib/vpreca-constants.js";
 import type {
   UseBitcoinProduct,
   ProductCatalog,
@@ -143,7 +144,8 @@ export function registerUseBitcoinTools(server: McpServer): void {
     "usebitcoin_buy_gift_card",
     "Buy a gift card on UseBitcoin.jp using Bitcoin Lightning payment via Cashu ecash. " +
       `Supported products: ${ALL_PRODUCT_NAMES.join(", ")}. ` +
-      "Returns the gift card code, order ID, and payment details.",
+      "Returns the gift card code, order ID, and payment details. " +
+      "For V-Preca, the response also includes `terms_url` pointing to the official 利用規約 page that the agent auto-clicks through; surface it to the user before the card number.",
     {
       product: z
         .enum(ALL_PRODUCT_NAMES as [string, ...string[]])
@@ -159,27 +161,28 @@ export function registerUseBitcoinTools(server: McpServer): void {
     async ({ product, amount }) => {
       try {
         const result = await buyGiftCard(product as UseBitcoinProduct, amount);
+        const payload: Record<string, unknown> = {
+          success: true,
+          product: result.product,
+          productName: PRODUCT_CATALOG[result.product].name,
+          code: result.code,
+          secondaryCode: result.secondaryCode ?? null,
+          amount: result.amount,
+          orderId: result.orderId,
+          paymentPreimage: result.preimage,
+          paymentMethod: result.paymentMethod,
+          satsPaid: result.satsPaid,
+          fee: result.fee ?? 0,
+        };
+        if (result.product === "vpreca") {
+          payload.terms_url = VPRECA_TERMS_URL;
+          payload.notice = VPRECA_TERMS_NOTICE;
+        }
         return {
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  product: result.product,
-                  productName: PRODUCT_CATALOG[result.product].name,
-                  code: result.code,
-                  secondaryCode: result.secondaryCode ?? null,
-                  amount: result.amount,
-                  orderId: result.orderId,
-                  paymentPreimage: result.preimage,
-                  paymentMethod: result.paymentMethod,
-                  satsPaid: result.satsPaid,
-                  fee: result.fee ?? 0,
-                },
-                null,
-                2,
-              ),
+              text: JSON.stringify(payload, null, 2),
             },
           ],
         };
@@ -299,7 +302,8 @@ export function registerUseBitcoinTools(server: McpServer): void {
   server.tool(
     "usebitcoin_wait_for_fulfillment",
     "Poll a UseBitcoin.jp order until it is fulfilled, then return the purchased code(s). " +
-      "Pair with `usebitcoin_create_invoice_qr` for manual-pay flows.",
+      "Pair with `usebitcoin_create_invoice_qr` for manual-pay flows. " +
+      "If the fulfilled order is a V-Preca SKU, the response also includes `terms_url` for the 利用規約 page the agent auto-accepted; surface it to the user before the card number.",
     {
       orderId: z.string().uuid().describe("The order_id returned by usebitcoin_create_invoice_qr."),
       timeoutMs: z
@@ -318,24 +322,27 @@ export function registerUseBitcoinTools(server: McpServer): void {
           );
         }
         const { code, secondaryCode, redeemUrl, fields } = extractCodesFromOrder(order);
+        const firstSku = order.codes?.[0]?.sku ?? "";
+        const isVpreca = firstSku.startsWith(`${PRODUCT_CATALOG.vpreca.skuPrefix}-`);
+        const payload: Record<string, unknown> = {
+          success: true,
+          orderId,
+          code,
+          secondaryCode: secondaryCode ?? null,
+          redeemUrl: redeemUrl ?? null,
+          fields,
+          preimage: order.preimage ?? null,
+          totalSats: order.total_sats ?? null,
+        };
+        if (isVpreca) {
+          payload.terms_url = VPRECA_TERMS_URL;
+          payload.notice = VPRECA_TERMS_NOTICE;
+        }
         return {
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(
-                {
-                  success: true,
-                  orderId,
-                  code,
-                  secondaryCode: secondaryCode ?? null,
-                  redeemUrl: redeemUrl ?? null,
-                  fields,
-                  preimage: order.preimage ?? null,
-                  totalSats: order.total_sats ?? null,
-                },
-                null,
-                2,
-              ),
+              text: JSON.stringify(payload, null, 2),
             },
           ],
         };
