@@ -1,127 +1,138 @@
 # Purchasing Agent Skill Sets
 
-Bitcoin でギフトカード・eSIM・モバイルトップアップ・デジタルコンテンツを購入する MCP サーバーとスキル。
+> 日本語版: [README.ja.md](./README.ja.md)
 
-- **UseBitcoin.jp**: 国内 6 種類のギフトカード（Kyash・V-Preca・QUO カード Pay・au PAY・DMM・BitCash）
-- **Bitrefill**: 世界 180+ カ国、1,500+ ブランドのギフトカード・eSIM・モバイルトップアップ
-- **V-Preca inquiry**: 購入済み V-Preca カードのフル情報（カード番号・有効期限・CVV・残高）取得
+An MCP server and skill set for buying gift cards, eSIMs, mobile top-ups, and digital content with Bitcoin.
 
-Cashu ecash から Lightning 支払いで購入します。
+- **UseBitcoin.jp**: 6 Japan-issued gift cards (Kyash, V-Preca, QUO Card Pay, au PAY, DMM, BitCash)
+- **Bitrefill**: 1,500+ brands across 180+ countries — gift cards, eSIMs, and mobile top-ups
+- **V-Preca inquiry**: Reveal the full card details (number, expiry, CVV, balance) of a purchased V-Preca gift
 
----
+All purchases are paid from Cashu ecash via Lightning.
 
-## 目次
+## For international users
 
-1. [対応商品](#対応商品)
-2. [動作モード](#動作モード)
-3. [セットアップ A — MCP サーバーとして使う](#セットアップ-a--mcp-サーバーとして使う)
-4. [セットアップ B — Claude Code SKILL として使う](#セットアップ-b--claude-code-skill-として使う)
-5. [Bitrefill 連携](#bitrefill-連携)
-6. [MCP ツール一覧](#mcp-ツール一覧)
-   - [V-Preca カード照会](#v-preca-カード照会)
-7. [環境変数リファレンス](#環境変数リファレンス)
-8. [アーキテクチャ](#アーキテクチャ)
-9. [開発](#開発)
+Most UseBitcoin.jp products are usable only inside Japan, but two of them are practical for international users:
+
+- **V-Preca**: A Visa prepaid card. You can register it with Google Pay and tap-to-pay anywhere Visa contactless is accepted, including outside Japan.
+- **BitCash**: Widely accepted by Japanese online games, digital content stores, and adult content sites — useful from anywhere as long as the merchant accepts it.
+
+For everything else (Amazon vouchers, Google Play, Netflix, Steam, App Store, Uber, eSIM data plans, and so on, in 180+ countries), use Bitrefill.
 
 ---
 
-## 対応商品
+## Table of contents
 
-### UseBitcoin.jp（国内ギフトカード）
-
-UseBitcoin 公式 REST API (`/api/v1/invoices`, `/api/v1/orders/{id}`) 経由で Lightning 決済します。`USEBITCOIN_API_KEY` が必要です。
-
-| 商品 | `product` | 金額 (JPY) | 用途 |
-|------|-----------|-----------|------|
-| Kyash ギフトコード | `kyash` | 500, 1000, 5000, 10000, 50000 | Visa プリペイド（Kyash アプリ） |
-| V-Preca ギフト | `vpreca` | 500, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000, 100000 | Visa プリペイド（ネット決済） |
-| QUO カード Pay | `quocard` | 500, 1000, 3000, 5000, 10000 | コンビニ・書店等 |
-| au PAY ギフト | `aupay` | 1000, 3000, 5000, 10000, 50000 | au PAY 加盟店 |
-| DMM ポイント | `dmm` | 2000, 5000, 10000, 50000, 100000 | DMM.com（8%割引あり） |
-| ビットキャッシュ | `bitcash` | 1500, 3000, 5000, 10000, 50000 | オンラインゲーム・電子書籍 |
-
-### Bitrefill（世界 180+ カ国）
-
-Bitrefill 経由で **1,500+ ブランド**のデジタル商品を購入可能です。
-
-例: Amazon（各国）、Google Play、Netflix、Steam、App Store、Uber、eSIM データプラン 等
-
-> Bitrefill 利用には別途 API キーが必要です。詳しくは [Bitrefill 連携](#bitrefill-連携) を参照。
+1. [Supported products](#supported-products)
+2. [How it works](#how-it-works)
+3. [Setup A — use as an MCP server](#setup-a--use-as-an-mcp-server)
+4. [Setup B — use as Claude Code SKILLs](#setup-b--use-as-claude-code-skills)
+5. [Bitrefill integration](#bitrefill-integration)
+6. [MCP tool reference](#mcp-tool-reference)
+   - [V-Preca card inquiry](#v-preca-card-inquiry)
+7. [Environment variables](#environment-variables)
+8. [Architecture](#architecture)
+9. [Development](#development)
 
 ---
 
-## 動作モード
+## Supported products
 
-Cashu ecash トークンだけで動作します。Lightning ノードは不要です。
+### UseBitcoin.jp (Japan-issued gift cards)
+
+Purchases go through the UseBitcoin official REST API (`/api/v1/invoices`, `/api/v1/orders/{id}`) and are paid over Lightning. `USEBITCOIN_API_KEY` is required.
+
+| Product | `product` | Denominations (JPY) | Usage |
+|---------|-----------|---------------------|-------|
+| Kyash gift code | `kyash` | 500, 1000, 5000, 10000, 50000 | Visa prepaid (Kyash app) |
+| V-Preca gift | `vpreca` | 500, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000, 100000 | Visa prepaid (online payments, Google Pay) |
+| QUO Card Pay | `quocard` | 500, 1000, 3000, 5000, 10000 | Convenience stores, bookstores, etc. |
+| au PAY gift | `aupay` | 1000, 3000, 5000, 10000, 50000 | au PAY merchants |
+| DMM points | `dmm` | 2000, 5000, 10000, 50000, 100000 | DMM.com (8% discount available) |
+| BitCash | `bitcash` | 1500, 3000, 5000, 10000, 50000 | Online games, e-books, digital content |
+
+### Bitrefill (180+ countries)
+
+Buy from **1,500+ brands** of digital products through Bitrefill.
+
+Examples: Amazon (various countries), Google Play, Netflix, Steam, App Store, Uber, eSIM data plans, and many more.
+
+> Bitrefill requires a separate API key. See [Bitrefill integration](#bitrefill-integration).
+
+---
+
+## How it works
+
+The agent runs on Cashu ecash tokens only. No Lightning node is required.
 
 ```
-Cashu トークン受取 → melt（Mint が Lightning を代行） → UseBitcoin / Bitrefill → ギフトコード
+Receive Cashu tokens → melt (mint pays Lightning on your behalf) → UseBitcoin / Bitrefill → gift code
 ```
 
-**必要な設定**: `CASHU_MINT_URL` + `CASHU_STORE_KEY` のみ
+**Required configuration**: `CASHU_MINT_URL` + `CASHU_STORE_KEY`
 
-**入金方法**:
-- 他のユーザーや Cashu ウォレットから `cashuB...` トークン文字列を受け取る
-- Lightning ウォレット（Phoenix, WoS 等）から `cashu_create_invoice` で直接チャージ
+**Funding options**:
+- Receive a `cashuB...` token string from another user or Cashu wallet
+- Top up directly from any Lightning wallet (Phoenix, WoS, etc.) via `cashu_create_invoice`
 
 ---
 
-## セットアップ A — MCP サーバーとして使う
+## Setup A — use as an MCP server
 
-Claude Desktop や Claude Code から MCP ツールとして直接呼び出す方法です。
+Call the tools directly from Claude Desktop or Claude Code.
 
-### A-1. 前提ツール (Volta)
+### A-1. Prerequisites (Volta)
 
-このプロジェクトでは Node.js / pnpm のバージョン管理に [Volta](https://volta.sh/) を使うことを推奨しています。Claude Code から MCP サーバーを起動する際も `$HOME/.volta/bin` を `PATH` に通して `npx` を解決しているため (`.mcp.json` 参照)、Volta が入っていれば追加設定不要で動きます。
+We recommend [Volta](https://volta.sh/) to pin Node.js and pnpm versions for this project. When Claude Code spawns the MCP server, it adds `$HOME/.volta/bin` to `PATH` so it can resolve `npx` (see `.mcp.json`), so Volta works out of the box.
 
-**インストール**:
+**Install Volta**:
 
 ```bash
 curl https://get.volta.sh | bash
-# シェルを開き直すか、以下を実行
+# Reopen your shell, or run:
 export VOLTA_HOME="$HOME/.volta"
 export PATH="$VOLTA_HOME/bin:$PATH"
 ```
 
-**Node + pnpm を導入**:
+**Install Node and pnpm**:
 
 ```bash
-volta install node@20      # Node 20 以上が必須 (engines.node: ">=20.0.0")
+volta install node@20      # Node 20+ required (engines.node: ">=20.0.0")
 volta install pnpm
 ```
 
-リポジトリ直下に降りた時に `node -v` / `pnpm -v` がそれぞれ表示されれば OK です。Volta を使わない場合でも、Node 20+ と pnpm が `PATH` に通っていれば動作します。
+Running `node -v` and `pnpm -v` inside the repo should print versions. If you'd rather not use Volta, any Node 20+ and pnpm on your `PATH` will work.
 
-### A-2. インストール
+### A-2. Install
 
 ```bash
 git clone --recurse-submodules https://github.com/cachet-jp/ln-agent-poc-v2.git
 cd ln-agent-poc-v2/purchasing-agent
 pnpm install
-npx playwright install chromium   # 初回のみ（V-Preca 照会で必要）
+npx playwright install chromium   # first-time only (V-Preca inquiry needs it)
 ```
 
-### A-3. 環境変数
+### A-3. Environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-最小構成:
+Minimum configuration:
 
 ```bash
 CASHU_MINT_URL=https://mint.minibits.cash/Bitcoin
-CASHU_STORE_KEY=<64文字の hex>    # 下記コマンドで生成
+CASHU_STORE_KEY=<64-char hex>    # generate with the command below
 MAX_SPEND_JPY=5000
 HEADLESS=true
 
-# UseBitcoin.jp REST API — usebitcoin_buy_* ツール利用時に必須
-USEBITCOIN_API_KEY=<UseBitcoin.jp で発行した API キー>
+# UseBitcoin.jp REST API — required for usebitcoin_buy_* tools
+USEBITCOIN_API_KEY=<your UseBitcoin.jp API key>
 ```
 
-> 暗号化キー生成: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+> Generate the encryption key: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
-### A-4. Claude Desktop に登録
+### A-4. Register with Claude Desktop
 
 `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -137,155 +148,151 @@ USEBITCOIN_API_KEY=<UseBitcoin.jp で発行した API キー>
 }
 ```
 
-> `.env` ファイルを配置済みなら `env` フィールドは不要です。
+> If `.env` is already in place, you don't need an `env` field.
 
-### A-5. Claude Code に登録
+### A-5. Register with Claude Code
 
 ```bash
 cd ln-agent-poc-v2/purchasing-agent
 claude mcp add purchasing-agent -- npx tsx src/server.ts
 ```
 
-### A-6. 動作確認
+### A-6. Smoke test
 
-Claude のチャットで以下を試してください:
+In Claude chat, try:
 
 ```
-ツール cashu_get_balance を呼んで
+Call the cashu_get_balance tool.
 ```
 
-残高が表示されれば接続成功です。
+If your balance prints, the connection is working.
 
 ---
 
-## セットアップ B — Claude Code SKILL として使う
+## Setup B — use as Claude Code SKILLs
 
-スラッシュコマンド（`/cashu-purchase` 等）でガイド付きの購入体験を提供します。
-非エンジニアでも会話形式で操作できます。
+The slash commands (`/cashu-purchase`, etc.) provide a guided, conversational purchase flow. Non-engineers can use them by talking to Claude.
 
-### B-1. セットアップ
+### B-1. Setup
 
-[セットアップ A](#セットアップ-a--mcp-サーバーとして使う) の A-1 〜 A-5 を完了してください。
+Complete steps A-1 through A-5 of [Setup A](#setup-a--use-as-an-mcp-server).
 
-SKILL ファイルはリポジトリの `.claude/commands/` に含まれているため、Claude Code でこのリポジトリを開くと自動で認識されます。
+The SKILL files live in `.claude/commands/` and Claude Code picks them up automatically when you open this repo.
 
-### B-2. 利用可能な SKILL
+### B-2. Available SKILLs
 
-| コマンド | 説明 |
-|---------|------|
-| `/cashu-purchase` | Cashu 経由でギフトカードを購入（対話形式） |
-| `/cashu-manage` | Cashu ウォレット管理（残高・送受信・Lightning チャージ） |
-| `/auto-purchase` | BTC でギフトカードを自動購入（ステップバイステップ） |
-| `/bitrefill-purchase` | Bitrefill でギフトカード・eSIM を購入（世界 180+ カ国） |
-| `/vpreca-inquiry` | V-Preca カード照会（ギフトコード → フルカード情報取得） |
+| Command | Description |
+|---------|-------------|
+| `/cashu-purchase` | Buy a gift card via Cashu (conversational) |
+| `/cashu-manage` | Manage the Cashu wallet (balance, send/receive, Lightning top-up) |
+| `/auto-purchase` | Auto-buy a gift card with BTC (step-by-step) |
+| `/bitrefill-purchase` | Buy gift cards or eSIMs via Bitrefill (180+ countries) |
+| `/vpreca-inquiry` | V-Preca card inquiry (gift code → full card details) |
 
-### B-3. 使い方の例
+### B-3. Usage examples
 
-**Cashu チャージ（Lightning QR コード表示）:**
+**Top up Cashu (Lightning QR code):**
 
 ```
 > /cashu-manage
-→ 「5000 sats チャージしたい」
-→ （QR コードが表示される → Phoenix 等で支払い）
-→ 「支払った」
-→ （ecash が残高に追加される）
+→ "I want to top up 5000 sats."
+→ (A QR code appears → pay it from Phoenix etc.)
+→ "Paid."
+→ (Ecash is added to your balance.)
 ```
 
-**Kyash 1000 円を購入:**
+**Buy a 1,000 JPY Kyash gift:**
 
 ```
 > /cashu-purchase
-→ 「Kyash 1000円」
+→ "Kyash 1000 yen"
 ```
 
-**Bitrefill で Amazon ギフトカードを購入:**
+**Buy an Amazon gift card via Bitrefill:**
 
 ```
 > /bitrefill-purchase
-→ 「Amazon Japan の ¥100 ギフトカード」
+→ "Amazon Japan 100 yen gift card"
 ```
 
-**V-Preca のカード番号を取得:**
+**Get the V-Preca card number:**
 
 ```
 > /vpreca-inquiry
-→ 「ギフトコード: GkMPMzZcAHus4F1、下4桁: 1234」
-→ （カード番号・有効期限・CVV・残高が表示される）
-→ そのまま EC サイトのネット決済で利用
+→ "Gift code: GkMPMzZcAHus4F1, last 4 digits: 1234"
+→ (Card number, expiry, CVV, and balance are shown.)
+→ Use the details for online card payments.
 ```
 
-### B-4. 別プロジェクトから SKILL だけ使う
+### B-4. Using the SKILLs from another project
 
-自分のプロジェクトに SKILL ファイルだけコピーして使うこともできます（A のステップが全て完了している必要があります）:
+You can copy just the SKILL files into your own project (you still need all of step A completed somewhere):
 
 ```bash
-# SKILL ファイルをコピー
+# Copy the SKILL files
 cp -r ln-agent-poc-v2/.claude/commands/ your-project/.claude/commands/
 
-# MCP サーバーはグローバル設定で登録
+# Register the MCP server globally
 claude mcp add --scope user purchasing-agent -- \
   npx tsx /path/to/ln-agent-poc-v2/purchasing-agent/src/server.ts
 ```
 
 ---
 
-## Bitrefill 連携
+## Bitrefill integration
 
-Bitrefill を使うと世界中のギフトカード・eSIM・モバイルトップアップを BTC で購入できます。
-利用方法は **3 つ**あり、それぞれ認証方式が異なります。
+Bitrefill lets you buy gift cards, eSIMs, and mobile top-ups worldwide with BTC. There are **three** ways to use it, each with a different auth model.
 
-### 方式 1 — カスタム purchasing-agent（推奨）
+### Option 1 — custom purchasing-agent (recommended)
 
-purchasing-agent に統合された `bitrefill_buy` ツールを使います。
-**Cashu ecash で Lightning 支払いを自動代行**するため、Bitrefill アカウントに残高を入れる必要がありません。
+Use the integrated `bitrefill_buy` tool. It pays the Lightning invoice with Cashu ecash automatically, so you don't need to keep a balance on your Bitrefill account.
 
-#### セットアップ
+#### Setup
 
-1. **@bitrefill/cli をインストール**（purchasing-agent が内部で呼び出します）:
+1. **Install `@bitrefill/cli`** (the purchasing-agent invokes it internally):
    ```bash
    npm install -g @bitrefill/cli
    ```
 
-2. **API キーを取得**:
-   - [bitrefill.com/account/developers](https://www.bitrefill.com/account/developers) でキーを生成
-   - Bitrefill アカウントが必要（[bitrefill.com/signup](https://www.bitrefill.com/signup)）
+2. **Get an API key**:
+   - Generate one at [bitrefill.com/account/developers](https://www.bitrefill.com/account/developers)
+   - You need a Bitrefill account ([bitrefill.com/signup](https://www.bitrefill.com/signup))
 
-3. **`.env` に設定**:
+3. **Set it in `.env`**:
    ```bash
    BITREFILL_API_KEY=your_api_key_here
    ```
 
-4. **purchasing-agent を再起動**すれば `bitrefill_*` ツールが有効化されます。
+4. **Restart the purchasing-agent** to enable the `bitrefill_*` tools.
 
-#### 使い方
+#### Usage
 
 ```
-ツール bitrefill_search を呼んで、日本の Amazon ギフトカードを探して
-→ bitrefill_buy で ¥100 の Amazon.co.jp を購入して
+Call bitrefill_search to find Japanese Amazon gift cards.
+→ Then call bitrefill_buy to buy a ¥100 Amazon.co.jp gift card.
 ```
 
-#### 購入フロー
+#### Purchase flow
 
 ```
 bitrefill_buy(productId, value)
   → @bitrefill/cli buy-products --payment_method lightning
-  → Lightning invoice 取得
-  → Cashu melt（Mint が Lightning を代行）
-  → Bitrefill が支払い確認 → ギフトコード取得
+  → Receive Lightning invoice
+  → Cashu melt (mint pays Lightning)
+  → Bitrefill confirms payment → returns gift code
 ```
 
 ---
 
-### 方式 2 — 公式 Bitrefill MCP サーバー
+### Option 2 — official Bitrefill MCP server
 
-Bitrefill 公式の MCP サーバー（`bitrefill-mcp-server`）を **別の MCP サーバーとして**追加します。
-検索・ブラウズに加え、**Bitrefill アカウント残高**での支払いが可能です。
+Add Bitrefill's official MCP server (`bitrefill-mcp-server`) **as a separate MCP server**. In addition to search and browse, it supports paying with the **Bitrefill account balance**.
 
-#### セットアップ
+#### Setup
 
-1. **API キーを取得**（方式 1 と同じキーが使えます）
+1. **Get an API key** (the same key as Option 1 works)
 
-2. **`.mcp.json` に追加**:
+2. **Add to `.mcp.json`**:
    ```json
    {
      "mcpServers": {
@@ -301,95 +308,95 @@ Bitrefill 公式の MCP サーバー（`bitrefill-mcp-server`）を **別の MCP
    }
    ```
 
-3. **Claude Code を再起動**すると、`search`・`detail`・`create_invoice`・`pay_invoice` 等のツールが使えるようになります。
+3. **Restart Claude Code**. You'll then have `search`, `detail`, `create_invoice`, `pay_invoice`, etc.
 
-#### 公式 MCP vs カスタム purchasing-agent
+#### Official MCP vs. custom purchasing-agent
 
-| | 公式 MCP サーバー | カスタム purchasing-agent |
+| | Official MCP server | Custom purchasing-agent |
 |---|---|---|
-| 支払い方法 | Bitrefill **アカウント残高** | **Cashu ecash** (Lightning) |
-| 事前入金 | Bitrefill アカウントに BTC/crypto を入金 | Cashu ウォレットに ecash をチャージ |
-| 購入フロー | `create_invoice` → `pay_invoice` | `bitrefill_buy`（全自動） |
-| メリット | 公式サポート、注文管理機能が豊富 | Cashu との統合、入金不要 |
+| Payment | Bitrefill **account balance** | **Cashu ecash** (Lightning) |
+| Pre-funding | Deposit BTC/crypto to Bitrefill | Top up the Cashu wallet with ecash |
+| Purchase flow | `create_invoice` → `pay_invoice` | `bitrefill_buy` (fully automated) |
+| Strengths | Official support, richer order-management features | Cashu integration, no Bitrefill balance required |
 
 ---
 
-### 方式 3 — Bitrefill CLI 直接利用（OAuth）
+### Option 3 — Bitrefill CLI directly (OAuth)
 
-`@bitrefill/cli` を直接コマンドラインから使います。API キーなしで **ブラウザ OAuth** による対話認証が可能です。
+Use `@bitrefill/cli` from the shell. No API key needed — the CLI runs interactive **browser OAuth**.
 
-#### セットアップ
+#### Setup
 
 ```bash
 npm install -g @bitrefill/cli
 
-# API キーなしで実行 → ブラウザが開いて OAuth 認証
+# Run without an API key → a browser opens for OAuth.
 bitrefill search-products --query "Amazon" --country JP
 
-# トークンは自動保存される（~/.config/bitrefill-cli/api.bitrefill.com.json）
+# The token is saved automatically (~/.config/bitrefill-cli/api.bitrefill.com.json)
 ```
 
-#### 使い方
+#### Usage
 
 ```bash
-# 商品検索
+# Search for products
 bitrefill search-products --query "Netflix" --country US
 
-# 商品詳細
+# Get product details
 bitrefill get-product-details --product_id "netflix-usa"
 
-# 購入（Lightning 支払い）
+# Buy (Lightning payment)
 bitrefill buy-products \
   --cart_items '[{"product_id": "amazon_jp-japan", "package_id": 100}]' \
   --payment_method lightning
 
-# 注文確認・コード取得
+# Check the order and fetch the code
 bitrefill list-orders --include_redemption_info true
 ```
 
-> CLI が返す Lightning invoice を Cashu で支払うには、ヘルパースクリプトを使います:
+> To pay the Lightning invoice the CLI returns with Cashu, use the helper script:
 > ```bash
 > npx tsx purchasing-agent/scripts/cashu-pay-bolt11.ts <bolt11_invoice>
 > ```
 
 ---
 
-### 認証方式の比較
+### Auth options at a glance
 
-| 方式 | 認証 | API キー | 用途 |
-|------|------|---------|------|
-| **方式 1**: purchasing-agent | `BITREFILL_API_KEY` env var | 必要 | MCP ツール + Cashu 支払い（推奨） |
-| **方式 2**: 公式 MCP サーバー | `BITREFILL_API_ID` + `API_SECRET` | 必要 | 公式ツール + アカウント残高払い |
-| **方式 3**: CLI 直接 | ブラウザ OAuth（対話） | 不要 | コマンドライン操作 |
+| Option | Auth | API key | Best for |
+|--------|------|---------|----------|
+| **Option 1**: purchasing-agent | `BITREFILL_API_KEY` env var | Required | MCP tools + Cashu payment (recommended) |
+| **Option 2**: official MCP server | `BITREFILL_API_ID` + `API_SECRET` | Required | Official tooling + account-balance payment |
+| **Option 3**: CLI directly | Browser OAuth (interactive) | Not required | Command-line use |
 
-> **API キーの取得**: いずれの方式でも [bitrefill.com/account/developers](https://www.bitrefill.com/account/developers) で取得できます（方式 3 は OAuth で代替可能）。
+> **API keys** for any of the options can be generated at [bitrefill.com/account/developers](https://www.bitrefill.com/account/developers). Option 3 can use OAuth instead.
 
 ---
 
-## MCP ツール一覧
+## MCP tool reference
 
-### ギフトカード購入（UseBitcoin.jp）
+### Gift card purchases (UseBitcoin.jp)
 
-| ツール | 説明 |
-|--------|------|
-| `usebitcoin_buy_gift_card` | ギフトカード購入（product + amount を指定） |
-| `usebitcoin_list_products` | 商品カタログ一覧 |
-| `usebitcoin_create_invoice_qr` | Lightning invoice + QR コードを取得（手動支払い） |
-| `usebitcoin_wait_for_fulfillment` | 注文の完了を待ってコードを取得 |
-| `vpreca_inquiry` | V-Preca ギフト照会（ギフトコード + カード下4桁 → フルカード情報取得） |
+| Tool | Description |
+|------|-------------|
+| `usebitcoin_buy_gift_card` | Buy a gift card (specify `product` and `amount`) |
+| `usebitcoin_list_products` | List the product catalog |
+| `usebitcoin_create_invoice_qr` | Fetch a Lightning invoice + QR code (manual payment) |
+| `usebitcoin_wait_for_fulfillment` | Wait for an order to complete and retrieve the code |
+| `vpreca_inquiry` | V-Preca gift inquiry (gift code + last 4 digits → full card details) |
 
-#### V-Preca カード照会
+#### V-Preca card inquiry
 
-V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Lifecard 照会ページに入力して **フルカード情報（カード番号・有効期限・CVV・残高）** を取得します。
+After buying a V-Preca gift, submit the gift code and the last four card digits to the Lifecard inquiry page to retrieve the **full card details** (number, expiry, CVV, balance).
 
-**パラメータ**
+**Parameters**
 
-| パラメータ | 型 | 説明 |
-|-----------|-----|------|
-| `giftCode` | string | V-Preca ギフトコード（UseBitcoin 購入時に取得） |
-| `cardLast4` | string | カード番号下4桁（数字4桁） |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `giftCode` | string | The V-Preca gift code (returned by UseBitcoin at purchase) |
+| `cardLast4` | string | The last 4 digits of the card number |
 
-**返り値**
+**Return value**
 
 ```json
 {
@@ -402,7 +409,7 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 }
 ```
 
-**ワークフロー例**
+**Example workflow**
 
 ```
 1. usebitcoin_buy_gift_card(product: "vpreca", amount: 500)
@@ -411,84 +418,84 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 2. vpreca_inquiry(giftCode: "GkMPMzZcAHus4F1", cardLast4: "1234")
    → { cardNumber: "4444...", expiryDate: "10/28", securityCode: "917", balance: 500 }
 
-3. EC サイトのネット決済でフルカード情報を利用
+3. Use the full card details for online payments.
 ```
 
-### Bitrefill 購入（要 `BITREFILL_API_KEY`）
+### Bitrefill purchases (requires `BITREFILL_API_KEY`)
 
-| ツール | 説明 |
-|--------|------|
-| `bitrefill_search` | 商品検索（商品名・国・カテゴリで絞り込み） |
-| `bitrefill_product_detail` | 商品詳細（金額・パッケージ・引き換え方法） |
-| `bitrefill_categories` | カテゴリ一覧取得 |
-| `bitrefill_buy` | 購入実行（Lightning invoice → Cashu 支払い → コード取得） |
-| `bitrefill_order_status` | 注文ステータス確認 |
-| `bitrefill_account_balance` | Bitrefill アカウント残高確認 |
+| Tool | Description |
+|------|-------------|
+| `bitrefill_search` | Search products (filter by name, country, or category) |
+| `bitrefill_product_detail` | Product details (denominations, packages, redemption info) |
+| `bitrefill_categories` | List categories |
+| `bitrefill_buy` | Buy (Lightning invoice → Cashu payment → fetch code) |
+| `bitrefill_order_status` | Check order status |
+| `bitrefill_account_balance` | Check Bitrefill account balance |
 
-### Cashu ウォレット
+### Cashu wallet
 
-| ツール | 説明 |
-|--------|------|
-| `cashu_get_balance` | ecash 残高確認 |
-| `cashu_create_invoice` | Lightning invoice 発行（QR コード付き）で入金 |
-| `cashu_claim_invoice` | 支払い済み invoice から ecash を受け取り |
-| `cashu_receive_tokens` | Cashu トークン受取 |
-| `cashu_send_tokens` | Cashu トークン送信（トークン文字列を生成） |
-| `cashu_melt_tokens` | Lightning invoice を ecash で支払い |
-| `cashu_check_proofs` | proof の有効性チェック・spent 自動削除 |
-| `cashu_get_mint_info` | Cashu Mint のメタ情報 |
+| Tool | Description |
+|------|-------------|
+| `cashu_get_balance` | Show the ecash balance |
+| `cashu_create_invoice` | Create a Lightning invoice (with QR code) for top-up |
+| `cashu_claim_invoice` | Claim ecash from a paid invoice |
+| `cashu_receive_tokens` | Receive a Cashu token |
+| `cashu_send_tokens` | Send (mint) a Cashu token string |
+| `cashu_melt_tokens` | Pay a Lightning invoice from ecash |
+| `cashu_check_proofs` | Validate proofs and auto-remove spent ones |
+| `cashu_get_mint_info` | Fetch Cashu mint metadata |
 
-## 環境変数リファレンス
+## Environment variables
 
-### Cashu（必須）
+### Cashu (required)
 
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `CASHU_MINT_URL` | ✅ | — | Cashu Mint の URL |
-| `CASHU_STORE_KEY` | — | — | proof 暗号化キー（64 文字 hex） |
-| `CASHU_MAX_BALANCE_SATS` | — | `1000000` | ecash 最大保有量（sats） |
-| `CASHU_PREFERRED` | — | `true` | Cashu を優先支払い手段にする |
+| Variable | Required | Default | Description |
+|----------|:--------:|---------|-------------|
+| `CASHU_MINT_URL` | yes | — | Cashu mint URL |
+| `CASHU_STORE_KEY` | — | — | Proof encryption key (64-char hex) |
+| `CASHU_MAX_BALANCE_SATS` | — | `1000000` | Maximum ecash balance (sats) |
+| `CASHU_PREFERRED` | — | `true` | Prefer Cashu as the payment method |
 
-### UseBitcoin.jp（UseBitcoin 購入で必要）
+### UseBitcoin.jp (required for UseBitcoin purchases)
 
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `USEBITCOIN_API_KEY` | — | — | UseBitcoin.jp で発行した API キー |
-| `USEBITCOIN_API_BASE_URL` | — | `https://usebitcoin.jp/api/v1` | API ベース URL（上書き用） |
+| Variable | Required | Default | Description |
+|----------|:--------:|---------|-------------|
+| `USEBITCOIN_API_KEY` | — | — | API key issued by UseBitcoin.jp |
+| `USEBITCOIN_API_BASE_URL` | — | `https://usebitcoin.jp/api/v1` | Override the API base URL |
 
-### Bitrefill（Bitrefill 購入で必要）
+### Bitrefill (required for Bitrefill purchases)
 
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `BITREFILL_API_KEY` | — | — | Bitrefill API キー（[取得](https://www.bitrefill.com/account/developers)） |
-| `BITREFILL_API_ID` | — | — | 公式 MCP サーバー用 ID（`API_KEY` と同じ値で OK） |
-| `BITREFILL_API_SECRET` | — | — | 公式 MCP サーバー用 SECRET（`API_KEY` と同じ値で OK） |
+| Variable | Required | Default | Description |
+|----------|:--------:|---------|-------------|
+| `BITREFILL_API_KEY` | — | — | Bitrefill API key ([get one](https://www.bitrefill.com/account/developers)) |
+| `BITREFILL_API_ID` | — | — | ID for the official MCP server (the same value as `API_KEY` works) |
+| `BITREFILL_API_SECRET` | — | — | Secret for the official MCP server (the same value as `API_KEY` works) |
 
-### 共通
+### Shared
 
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `MAX_SPEND_JPY` | — | `5000` | 1 回の購入上限（JPY） |
-| `HEADLESS` | — | `true` | Playwright headless モード（V-Preca inquiry で利用） |
+| Variable | Required | Default | Description |
+|----------|:--------:|---------|-------------|
+| `MAX_SPEND_JPY` | — | `5000` | Single-purchase cap (JPY) |
+| `HEADLESS` | — | `true` | Run Playwright headless (used by V-Preca inquiry) |
 
 ---
 
-## アーキテクチャ
+## Architecture
 
-### 支払いフロー
+### Payment flow
 
 ```
 [UseBitcoin]
-  Cashu ecash → melt → Cashu Mint が Lightning 代行 → UseBitcoin → ギフトコード
+  Cashu ecash → melt → Cashu mint pays Lightning → UseBitcoin → gift code
 
 [Bitrefill]
-  Cashu ecash → melt → Cashu Mint が Lightning 代行 → Bitrefill CLI → ギフトコード/eSIM
+  Cashu ecash → melt → Cashu mint pays Lightning → Bitrefill CLI → gift code / eSIM
 
 [V-Preca inquiry]
-  UseBitcoin で V-Preca 購入 → vpreca_inquiry (Playwright で Lifecard 照会) → フルカード情報
+  UseBitcoin buys V-Preca → vpreca_inquiry (Playwright on Lifecard) → full card details
 ```
 
-### システム構成
+### System diagram
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -509,58 +516,58 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 │  UseBitcoin API Client (fetch)                       │
 │  (usebitcoin-api.ts)                                 │
 │                                                      │
-│  V-Preca Inquiry  (Lifecard 照会ページ)              │
+│  V-Preca Inquiry  (Lifecard inquiry page)            │
 │  Playwright  (headless Chrome)                       │
 └──────┬──────────┬──────────┬─────────────────────────┘
        │          │          │
        ▼          ▼          ▼
   Cashu Mint  UseBitcoin  Bitrefill
-  (Lightning)  (国内ギフト) (世界1500+)
+  (Lightning) (JP gifts)  (1,500+ worldwide)
 ```
 
-### 技術スタック
+### Technology stack
 
-| 層 | 技術 |
-|---|---|
+| Layer | Technology |
+|-------|------------|
 | MCP | `@modelcontextprotocol/sdk` — stdio transport |
 | Cashu | `@cashu/cashu-ts` — NUT-04/05/06/07/11/12 |
-| Bitrefill | `@bitrefill/cli` — MCP API ラッパー |
-| ブラウザ | Playwright headless Chrome（V-Preca 照会のみ） |
-| 設定 | zod validation + dotenv |
-| 暗号化 | AES-256-GCM（proof ストレージ） |
+| Bitrefill | `@bitrefill/cli` — MCP API wrapper |
+| Browser | Playwright headless Chrome (V-Preca inquiry only) |
+| Config | zod validation + dotenv |
+| Encryption | AES-256-GCM (proof storage) |
 
 ---
 
-## 開発
+## Development
 
-以下はすべて `purchasing-agent/` ディレクトリ内で実行してください。
+Run everything from inside `purchasing-agent/`.
 
 ```bash
 cd purchasing-agent
 pnpm install
 pnpm dev          # tsx watch mode
 pnpm build        # TypeScript compile
-pnpm start        # 本番起動
+pnpm start        # production start
 pnpm test         # vitest
 pnpm lint         # tsc --noEmit
 ```
 
-### ヘルパースクリプト
+### Helper scripts
 
 ```bash
-# Cashu 残高確認
+# Check the Cashu balance
 npx tsx scripts/check-cashu-balance.ts
 
-# Lightning チャージ用 invoice 発行
+# Create a Lightning invoice for top-up
 npx tsx scripts/cashu-create-invoice.ts 2000
 
-# 支払い済み invoice を claim
+# Claim a paid invoice
 npx tsx scripts/cashu-claim-invoice.ts <quoteId> <amountSats>
 
-# BOLT11 invoice を Cashu で支払い
+# Pay a BOLT11 invoice from Cashu
 npx tsx scripts/cashu-pay-bolt11.ts <bolt11>
 
-# Bitrefill E2E 購入テスト
+# End-to-end Bitrefill purchase test
 npx tsx scripts/test-bitrefill-buy.ts
 ```
 
