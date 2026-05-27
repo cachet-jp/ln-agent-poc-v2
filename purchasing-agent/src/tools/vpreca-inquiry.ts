@@ -2,10 +2,10 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { withPage, humanDelay, humanType } from "../lib/browser.js";
 import { withErrorHandler } from "../lib/tool-helpers.js";
+import { VPRECA_TERMS_URL, VPRECA_TERMS_NOTICE } from "../lib/vpreca-constants.js";
 import type { VPrecaCardDetails } from "../types.js";
 
-const VPRECA_INQUIRY_URL =
-  "https://vpclogin.lifecard.co.jp/web/vpreca/vpreca_gift_inquiry_terms_agreement";
+const VPRECA_INQUIRY_URL = VPRECA_TERMS_URL;
 
 // ---------------------------------------------------------------------------
 // Core inquiry function
@@ -88,7 +88,8 @@ export function registerVPrecaInquiryTools(server: McpServer): void {
   server.tool(
     "vpreca_inquiry",
     "V-Preca ギフト照会: ギフトコードとカード番号下4桁を入力して、フルカード情報（カード番号、有効期限、セキュリティコード、残高）を取得する。" +
-      "usebitcoin_buy_vpreca で購入後に使用する。",
+      "usebitcoin_buy_vpreca で購入後に使用する。" +
+      "レスポンスには V-Preca 利用規約ページの URL (`terms_url`) が含まれるので、カード番号を提示する前にユーザーへ案内すること。",
     {
       giftCode: z
         .string()
@@ -107,6 +108,8 @@ export function registerVPrecaInquiryTools(server: McpServer): void {
           securityCode: result.securityCode,
           balance: result.balance,
           cardName: result.cardName ?? null,
+          terms_url: VPRECA_TERMS_URL,
+          notice: VPRECA_TERMS_NOTICE,
         };
       }),
   );
