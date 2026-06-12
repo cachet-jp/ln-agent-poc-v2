@@ -10,6 +10,15 @@ An MCP server and skill set for buying gift cards, eSIMs, mobile top-ups, and di
 
 All purchases are paid from Cashu ecash via Lightning.
 
+## ⚠️ Disclaimer
+
+**This software spends real money.** It autonomously pays Lightning invoices from a Cashu ecash balance and purchases non-refundable gift cards. Provided as-is under the MIT license, with no warranty of any kind — use at your own risk.
+
+- A bug, a misconfigured agent, or a compromised environment can irreversibly spend your funds. Keep only small amounts in the wallet and rely on the built-in guardrails (`MAX_SPEND_JPY`, `CASHU_MAX_BALANCE_SATS`).
+- Cashu ecash is bearer money held against a mint you must trust; if the mint disappears, the balance is gone.
+- Never commit or share `.env`, `purchasing-agent/data/`, or `purchasing-agent/storage-state/` — they contain spendable funds and private sessions.
+- To report a security issue, see [SECURITY.md](./SECURITY.md).
+
 ## For international users
 
 Most UseBitcoin.jp products are usable only inside Japan, but two of them are practical for international users:
@@ -219,7 +228,7 @@ The SKILL files live in `.claude/commands/` and Claude Code picks them up automa
 
 ```
 > /vpreca-inquiry
-→ "Gift code: GkMPMzZcAHus4F1, last 4 digits: 1234"
+→ "Gift code: EXAMPLExxxxx123, last 4 digits: 1234"
 → (Card number, expiry, CVV, and balance are shown.)
 → Use the details for online card payments.
 ```
@@ -402,8 +411,8 @@ After buying a V-Preca gift, submit the gift code and the last four card digits 
 {
   "success": true,
   "cardNumber": "4444123456789012",
-  "expiryDate": "10 / 28",
-  "securityCode": "917",
+  "expiryDate": "12 / 30",
+  "securityCode": "000",
   "balance": 500,
   "cardName": "VPRECA"
 }
@@ -413,10 +422,10 @@ After buying a V-Preca gift, submit the gift code and the last four card digits 
 
 ```
 1. usebitcoin_buy_gift_card(product: "vpreca", amount: 500)
-   → { voucherCode: "GkMPMzZcAHus4F1", cardLast4: "1234" }
+   → { voucherCode: "EXAMPLExxxxx123", cardLast4: "1234" }
 
-2. vpreca_inquiry(giftCode: "GkMPMzZcAHus4F1", cardLast4: "1234")
-   → { cardNumber: "4444...", expiryDate: "10/28", securityCode: "917", balance: 500 }
+2. vpreca_inquiry(giftCode: "EXAMPLExxxxx123", cardLast4: "1234")
+   → { cardNumber: "4444...", expiryDate: "12/30", securityCode: "000", balance: 500 }
 
 3. Use the full card details for online payments.
 ```
