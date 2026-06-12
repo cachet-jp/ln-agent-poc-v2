@@ -33,7 +33,7 @@ async function main() {
   console.log(`Paid: ${payResult.paid}`);
   console.log(`Amount: ${payResult.amount} sats`);
   console.log(`Fee: ${payResult.fee} sats`);
-  console.log(`Preimage: ${payResult.preimage}`);
+  console.log(`Preimage: ${payResult.preimage.slice(0, 8)}… (redacted)`);
 
   if (!payResult.paid) {
     throw new Error("Cashu melt failed");
@@ -53,7 +53,8 @@ async function main() {
     if (order.items?.length) {
       for (const item of order.items) {
         console.log(`  Product: ${item.productName}`);
-        console.log(`  Code/PIN: ${item.code || item.pin}`);
+        const secret = item.code || item.pin;
+        console.log(`  Code/PIN: ${secret ? `received (${secret.length} chars, not logged)` : "none"}`);
       }
     }
   }

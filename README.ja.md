@@ -10,6 +10,15 @@ Bitcoin でギフトカード・eSIM・モバイルトップアップ・デジ�
 
 Cashu ecash から Lightning 支払いで購入します。
 
+## ⚠️ 免責事項
+
+**本ソフトウェアは実際のお金を消費します。** Cashu ecash 残高から Lightning インボイスを自律的に支払い、返金不可のギフトカードを購入します。MIT ライセンスのもと現状有姿で提供され、いかなる保証もありません。自己責任でご利用ください。
+
+- バグ・エージェントの誤設定・実行環境の侵害により、資金が不可逆的に消費される可能性があります。ウォレットには少額のみを保持し、ガードレール（`MAX_SPEND_JPY`、`CASHU_MAX_BALANCE_SATS`）を活用してください。
+- Cashu ecash は Mint への信頼を前提とするベアラーマネーです。Mint が消滅すると残高は失われます。
+- `.env`・`purchasing-agent/data/`・`purchasing-agent/storage-state/` には資金やセッション情報が含まれます。絶対にコミット・共有しないでください。
+- 脆弱性の報告は [SECURITY.md](./SECURITY.md) を参照してください。
+
 ---
 
 ## 目次
@@ -211,7 +220,7 @@ SKILL ファイルはリポジトリの `.claude/commands/` に含まれてい�
 
 ```
 > /vpreca-inquiry
-→ 「ギフトコード: GkMPMzZcAHus4F1、下4桁: 1234」
+→ 「ギフトコード: EXAMPLExxxxx123、下4桁: 1234」
 → （カード番号・有効期限・CVV・残高が表示される）
 → そのまま EC サイトのネット決済で利用
 ```
@@ -397,8 +406,8 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 {
   "success": true,
   "cardNumber": "4444123456789012",
-  "expiryDate": "10 / 28",
-  "securityCode": "917",
+  "expiryDate": "12 / 30",
+  "securityCode": "000",
   "balance": 500,
   "cardName": "VPRECA"
 }
@@ -408,10 +417,10 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 
 ```
 1. usebitcoin_buy_gift_card(product: "vpreca", amount: 500)
-   → { voucherCode: "GkMPMzZcAHus4F1", cardLast4: "1234" }
+   → { voucherCode: "EXAMPLExxxxx123", cardLast4: "1234" }
 
-2. vpreca_inquiry(giftCode: "GkMPMzZcAHus4F1", cardLast4: "1234")
-   → { cardNumber: "4444...", expiryDate: "10/28", securityCode: "917", balance: 500 }
+2. vpreca_inquiry(giftCode: "EXAMPLExxxxx123", cardLast4: "1234")
+   → { cardNumber: "4444...", expiryDate: "12/30", securityCode: "000", balance: 500 }
 
 3. EC サイトのネット決済でフルカード情報を利用
 ```
