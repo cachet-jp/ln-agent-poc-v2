@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { withPage, humanDelay, humanType } from "../lib/browser.js";
 import { withErrorHandler } from "../lib/tool-helpers.js";
@@ -6,6 +8,26 @@ import { VPRECA_TERMS_URL, VPRECA_TERMS_NOTICE } from "../lib/vpreca-constants.j
 import type { VPrecaCardDetails } from "../types.js";
 
 const VPRECA_INQUIRY_URL = VPRECA_TERMS_URL;
+
+const execFileAsync = promisify(execFile);
+
+// Open the inquiry page in the user's default browser so they read the terms
+// and enter their own gift code — the consent-preserving path. Best-effort: on
+// a headless/CI host (no opener, no display) we fall back to returning the URL.
+async function openInquiryPageInBrowser(): Promise<boolean> {
+  const [cmd, args]: [string, string[]] =
+    process.platform === "darwin"
+      ? ["open", [VPRECA_INQUIRY_URL]]
+      : process.platform === "win32"
+        ? ["cmd", ["/c", "start", "", VPRECA_INQUIRY_URL]]
+        : ["xdg-open", [VPRECA_INQUIRY_URL]];
+  try {
+    await execFileAsync(cmd, args, { timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Core inquiry function
@@ -86,9 +108,33 @@ export async function inquireVPrecaCard(
 
 export function registerVPrecaInquiryTools(server: McpServer): void {
   server.tool(
+    "vpreca_open_inquiry_page",
+    "V-Preca 照会ページ（利用規約同意ページ）をユーザーの既定ブラウザで開く。" +
+      "アカウントレスでカード番号を発行する際の既定（推奨）手段で、ユーザー本人が規約を確認し、" +
+      "購入したギフトコードとカード番号下4桁を入力する。" +
+      "ブラウザを開けない環境（headless/CI 等）では opened:false を返すので、その場合は url を案内すること。",
+    {},
+    async () =>
+      withErrorHandler(async () => {
+        const opened = await openInquiryPageInBrowser();
+        return {
+          success: true,
+          opened,
+          url: VPRECA_INQUIRY_URL,
+          notice: opened
+            ? "ブラウザで V-Preca の利用規約を確認し、購入したギフトコードとカード番号下4桁を入力してください。"
+            : "ブラウザを自動で開けませんでした。次の URL を手動で開いて、ギフトコードとカード番号下4桁を入力してください: " +
+              VPRECA_INQUIRY_URL,
+        };
+      }),
+  );
+
+  server.tool(
     "vpreca_inquiry",
-    "V-Preca ギフト照会: ギフトコードとカード番号下4桁を入力して、フルカード情報（カード番号、有効期限、セキュリティコード、残高）を取得する。" +
-      "usebitcoin_buy_vpreca で購入後に使用する。" +
+    "[opt-in] V-Preca ギフト照会をエージェントが代行する: ギフトコードとカード番号下4桁を入力して、" +
+      "フルカード情報（カード番号、有効期限、セキュリティコード、残高）を取得する。" +
+      "このツールはエージェントが利用規約に自動同意してカード情報を取得するため、" +
+      "既定はユーザー主導の vpreca_open_inquiry_page を使い、本ツールはユーザーが明示的に代行を希望した場合にのみ使用すること。" +
       "レスポンスには V-Preca 利用規約ページの URL (`terms_url`) が含まれるので、カード番号を提示する前にユーザーへ案内すること。",
     {
       giftCode: z
@@ -136,7 +182,7 @@ async function extractCardDetails(
       .map((el) => el.textContent?.trim() ?? "")
       .filter((t) => !/^\d+$/.test(t) || t.length === 3);
 
-    // Order on page: [0] expiry (e.g. "10 / 28"), [1] CVV (e.g. "917"), [2] card name (e.g. "VPRECA")
+    // Order on page: [0] expiry (e.g. "12 / 30"), [1] CVV (e.g. "000"), [2] card name (e.g. "VPRECA")
     const expiryDate = copyTexts[0] ?? "";
     const securityCode = copyTexts[1] ?? "";
     const cardName = copyTexts[2] || undefined;
