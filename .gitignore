@@ -1,17 +1,16 @@
-# Terraform
-terraform/.terraform/
-terraform/.terraform.lock.hcl
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
-terraform/terraform.tfvars
-terraform/tfplan
-
 # Secrets
-claude_desktop_config.json
-claude_desktop_config_patch.json
 .env
 *.pem
 *.key
+
+# Screenshots / QR dumps (may contain invoices, codes or card data)
+*.png
+*.jpg
+*.jpeg
+
+# Local machine config
+.claude/settings.local.json
+.claude/worktrees/
 
 # OS
 .DS_Store
@@ -28,5 +27,3 @@ purchasing-agent/.env
 purchasing-agent/storage-state/
 purchasing-agent/data/
 purchasing-agent/screenshots/
-purchasing-agent/.venv-scrapling/
-purchasing-agent/test-*.py

@@ -21,7 +21,7 @@ const instructions = `Bitcoin Lightning でギフトカード等を購入する 
   usebitcoin_create_invoice_qr / usebitcoin_wait_for_fulfillment
 - Bitrefill (世界 1,500+ ブランド): bitrefill_search / bitrefill_product_detail /
   bitrefill_categories / bitrefill_buy / bitrefill_order_status / bitrefill_account_balance
-- V-Preca: vpreca_inquiry
+- V-Preca: vpreca_open_inquiry_page（既定: 照会ページを既定ブラウザで開く） / vpreca_inquiry（opt-in: 規約同意を代行して照会）
 - 共通: render_qr (BOLT11 / Cashu トークン等を端末スキャン可能な QR に変換)
 
 ## QR コードを user に見せたいとき
@@ -38,8 +38,8 @@ cashu_create_invoice や cashu_send_tokens の image だけに頼ると、ユー
   → cashu_send_tokens { amount: <sats> }（QR + トークン文字列）
 - 「Amazon ギフト残高を Bitcoin で買いたい」
   → /bitrefill-purchase または usebitcoin_buy_gift_card
-- 「V-Preca カードの残高を確認したい」
-  → vpreca_inquiry
+- 「V-Preca のカード番号を発行したい」
+  → /vpreca-inquiry（既定はユーザー本人が照会ページで規約同意・コード入力。vpreca_open_inquiry_page で開く）
 
 「何ができますか？」と聞かれる前から、まずスキル名やツール名で試してみてください。`;
 
