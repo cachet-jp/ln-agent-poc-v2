@@ -1,18 +1,3 @@
-/** V-Preca gift code from UseBitcoin */
-export interface VPrecaCode {
-  /** Voucher code (alphanumeric, e.g. "GkMPMzZcAHus4F1") */
-  voucherCode: string;
-  /** Last 4 digits of the card number */
-  cardLast4: string;
-  /** Amount in JPY */
-  amount: number;
-  /** @deprecated Use voucherCode instead */
-  cardNumber: string;
-  /** @deprecated Use cardLast4 instead */
-  securityCode: string;
-  expiryDate?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Generic gift card types (UseBitcoin multi-product support)
 // ---------------------------------------------------------------------------
@@ -56,12 +41,6 @@ export interface GiftCardResult {
   fee?: number;
   /** Expiry date if applicable */
   expiryDate?: string;
-}
-
-/** UseBitcoin purchase result (common to all products) */
-export interface UseBitcoinOrderResult {
-  orderId: string;
-  orderPageUrl: string;
 }
 
 /** V-Preca card details retrieved from Lifecard inquiry page */
