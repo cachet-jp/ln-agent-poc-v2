@@ -41,6 +41,11 @@ const configSchema = z.object({
 
   // Guardrails
   MAX_SPEND_JPY: z.coerce.number().positive().default(5000),
+  // Absolute per-payment ceiling in sats, enforced at the melt chokepoint
+  // independent of any vendor-quoted price. Backstops every payment path
+  // (UseBitcoin, Bitrefill, user-paste melt) against an inflated invoice from
+  // a compromised/MITM'd vendor or a runaway agent loop. Tune to your wallet.
+  MAX_SPEND_SATS: z.coerce.number().int().positive().default(100_000),
 
   // Browser (V-Preca inquiry uses Playwright against Lifecard)
   HEADLESS: z

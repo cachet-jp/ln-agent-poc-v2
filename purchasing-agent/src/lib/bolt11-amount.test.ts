@@ -70,6 +70,14 @@ describe("decodeBolt11Sats", () => {
     it("throws on non-numeric amount", () => {
       expect(() => decodeBolt11Sats("lnbcabc1qpadding")).toThrow(/invalid amount/);
     });
+
+    it("throws on amounts past 2^53 that lose double precision (guard-bypass defense)", () => {
+      // 90071992547409m * 100_000 sats ≈ 9.0e18 — beyond MAX_SAFE_INTEGER, so the
+      // double rounds and could be coerced to equal an expected amount. Must reject.
+      expect(() => decodeBolt11Sats("lnbc90071992547409m1qpadding")).toThrow(
+        /safe integer range/,
+      );
+    });
   });
 
   describe("realistic sample", () => {

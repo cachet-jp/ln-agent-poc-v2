@@ -3,3 +3,11 @@ repos:
     rev: v8.21.2
     hooks:
       - id: gitleaks
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.82.13
+    hooks:
+      - id: trufflehog
+        name: trufflehog (verified secrets)
+        entry: trufflehog git file://. --since-commit HEAD --only-verified --fail
+        language: golang
+        pass_filenames: false

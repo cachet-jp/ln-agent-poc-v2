@@ -40,6 +40,8 @@ const _walletStubs = {
     (amount: number, proofs: Proof[], opts?: object) => Promise<{ send: Proof[]; keep: Proof[] }>
   >(),
   receive: vi.fn<(token: string | object, cfg?: object) => Promise<Proof[]>>(),
+  createMeltQuoteBolt11: vi.fn<(bolt11: string) => Promise<{ amount: number; fee_reserve: number; quote: string }>>(),
+  meltProofsBolt11: vi.fn(),
 };
 
 vi.mock("@cashu/cashu-ts", async (importOriginal) => {
@@ -52,6 +54,15 @@ vi.mock("@cashu/cashu-ts", async (importOriginal) => {
     }
     receive(token: string | object, cfg?: object) {
       return _walletStubs.receive(token, cfg);
+    }
+    createMeltQuoteBolt11(bolt11: string) {
+      return _walletStubs.createMeltQuoteBolt11(bolt11);
+    }
+    selectProofsToSend(proofs: Proof[], _amount: number, _includeFees: boolean) {
+      return { send: proofs, keep: [] as Proof[] };
+    }
+    meltProofsBolt11(quote: object, proofs: Proof[]) {
+      return _walletStubs.meltProofsBolt11(quote, proofs);
     }
   }
   return {
@@ -94,6 +105,48 @@ describe("cashu-client", () => {
     _memProofs = new Map();
     _walletStubs.send.mockReset();
     _walletStubs.receive.mockReset();
+    _walletStubs.createMeltQuoteBolt11.mockReset();
+    _walletStubs.meltProofsBolt11.mockReset();
+  });
+
+  describe("meltTokens spend cap (MAX_SPEND_SATS)", () => {
+    it("refuses to pay when the mint-quoted amount exceeds MAX_SPEND_SATS", async () => {
+      const mint = "https://mint.test";
+      _memProofs.set(mint, [makeProof(500_000, "big")]);
+      // Default MAX_SPEND_SATS is 100_000; quote above it must be rejected.
+      _walletStubs.createMeltQuoteBolt11.mockResolvedValue({
+        amount: 200_000,
+        fee_reserve: 100,
+        quote: "q1",
+      });
+
+      const { meltTokens } = await import("./cashu-client.js");
+      await expect(meltTokens("lnbc2m1qpadding")).rejects.toThrow(
+        /exceeds MAX_SPEND_SATS/,
+      );
+      // Must reject BEFORE actually melting any proofs.
+      expect(_walletStubs.meltProofsBolt11).not.toHaveBeenCalled();
+    });
+
+    it("pays when the quoted amount is within MAX_SPEND_SATS", async () => {
+      const mint = "https://mint.test";
+      _memProofs.set(mint, [makeProof(60_000, "ok")]);
+      _walletStubs.createMeltQuoteBolt11.mockResolvedValue({
+        amount: 50_000,
+        fee_reserve: 100,
+        quote: "q2",
+      });
+      _walletStubs.meltProofsBolt11.mockResolvedValue({
+        quote: { state: "PAID", payment_preimage: "deadbeef" },
+        change: [],
+      });
+
+      const { meltTokens } = await import("./cashu-client.js");
+      const result = await meltTokens("lnbc500u1qpadding");
+      expect(result.paid).toBe(true);
+      expect(result.amount).toBe(50_000);
+      expect(_walletStubs.meltProofsBolt11).toHaveBeenCalledOnce();
+    });
   });
 
   describe("sendTokens self-swap verification", () => {
