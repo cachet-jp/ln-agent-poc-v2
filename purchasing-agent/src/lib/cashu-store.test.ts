@@ -65,6 +65,15 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       }
       return actual.writeFile(path, data, opts);
     },
+    open: (path: string, ...rest: unknown[]) => {
+      if (typeof path === "string" && path.includes("cashu-proofs.enc.json")) {
+        if (_failTmpWrite && path.endsWith(".tmp")) {
+          return Promise.reject(new Error("simulated tmp write failure"));
+        }
+        return (actual.open as any)(redirect(path), ...rest);
+      }
+      return (actual.open as any)(path, ...rest);
+    },
     rename: (src: string, dst: string) => {
       if (_failRename && typeof src === "string" && src.includes("cashu-proofs.enc.json")) {
         return Promise.reject(new Error("simulated rename failure"));
@@ -175,7 +184,7 @@ describe("cashu-store", () => {
   describe("key derivation from CLW_SESSION_TOKEN", () => {
     it("derives encryption key from session token when CASHU_STORE_KEY is absent", async () => {
       _storeKey = ""; // force getCashuConfig to return undefined CASHU_STORE_KEY
-      vi.stubEnv("CLW_SESSION_TOKEN", "my-test-session-token");
+      vi.stubEnv("CLW_SESSION_TOKEN", "my-test-session-token-at-least-32-bytes-long");
 
       const { addProofs, loadProofs } = await import("./cashu-store.js");
       const mint = "https://mint.test";
@@ -187,6 +196,16 @@ describe("cashu-store", () => {
       expect(loaded).toHaveLength(1);
       expect(loaded[0].amount).toBe(99);
       expect(loaded[0].secret).toBe("derived-key-test");
+    });
+
+    it("rejects a CLW_SESSION_TOKEN shorter than 32 bytes (low-entropy key)", async () => {
+      _storeKey = "";
+      vi.stubEnv("CLW_SESSION_TOKEN", "too-short");
+
+      const { addProofs } = await import("./cashu-store.js");
+      await expect(
+        addProofs("https://mint.test", [makeProof({ amount: 1, secret: "x" })]),
+      ).rejects.toThrow(/too short/);
     });
 
     it("HKDF produces deterministic key for same token", () => {

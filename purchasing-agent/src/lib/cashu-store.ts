@@ -6,7 +6,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, createHash, hkdfSync } from "node:crypto";
-import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
+import { readFile, open, mkdir, rename, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -43,6 +43,14 @@ function deriveKey(): Buffer {
   }
 
   const ikm = Buffer.from(sessionToken, "utf-8");
+  // HKDF only stretches entropy, it doesn't add any. A short/low-entropy
+  // session token would yield a guessable at-rest key, so require enough IKM.
+  if (ikm.length < 32) {
+    throw new Error(
+      "CLW_SESSION_TOKEN is too short to derive a proof-encryption key (need >= 32 bytes). " +
+        "Set CASHU_STORE_KEY (64 hex chars) explicitly for any real deployment.",
+    );
+  }
   const salt = Buffer.from("cashu-proof-store-v1", "utf-8");
   const info = Buffer.from("aes-256-gcm", "utf-8");
   return Buffer.from(hkdfSync("sha256", ikm, salt, info, 32));
@@ -138,13 +146,35 @@ async function writeStore(data: StoreData[]): Promise<void> {
   await ensureDataDir();
   const plaintext = JSON.stringify(data, null, 2);
   const payload = encrypt(plaintext);
-  // Atomic write: stage to tmp then rename. POSIX rename is atomic on the same
-  // filesystem, so readers either see the old store or the new store — never a
-  // half-written file. Proofs are bearer assets, so store corruption = asset loss.
-  const tmpFile = `${STORE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  // Atomic + durable write: stage to tmp, fsync the data to stable storage,
+  // then rename. POSIX rename is atomic on the same filesystem, so readers see
+  // the old or new store — never a half-written file. The fsync matters because
+  // proofs are bearer assets: after a melt spends proofs at the mint, a crash
+  // that loses the un-synced change/new store would burn funds. We also fsync
+  // the directory so the rename itself survives a power loss.
+  const tmpFile = `${STORE_FILE}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   try {
-    await writeFile(tmpFile, JSON.stringify(payload), { mode: 0o600 });
+    const fh = await open(tmpFile, "w", 0o600);
+    try {
+      await fh.writeFile(JSON.stringify(payload));
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
     await rename(tmpFile, STORE_FILE);
+    // Best-effort: fsync the directory so the rename itself survives a power
+    // loss. Some filesystems disallow directory fsync; a failure here can't undo
+    // the already-durable file write, so never fail the operation over it.
+    try {
+      const dir = await open(DATA_DIR, "r");
+      try {
+        await dir.sync();
+      } finally {
+        await dir.close();
+      }
+    } catch {
+      // directory fsync unsupported — ignore
+    }
   } catch (err) {
     await unlink(tmpFile).catch(() => {});
     throw err;

@@ -65,7 +65,9 @@ export function registerCashuTools(server: McpServer): void {
     {
       amount: z
         .number()
+        .int()
         .positive()
+        .max(100_000_000)
         .describe("Amount in satoshis to send as ecash tokens"),
     },
     async ({ amount }) => {
@@ -180,7 +182,9 @@ export function registerCashuTools(server: McpServer): void {
     {
       amount: z
         .number()
+        .int()
         .positive()
+        .max(100_000_000)
         .describe("Amount in satoshis to receive"),
     },
     async ({ amount }) => {
@@ -230,7 +234,7 @@ export function registerCashuTools(server: McpServer): void {
       "Can be called multiple times safely — proofs are only claimed once.",
     {
       quoteId: z.string().describe("The quote ID returned by cashu_create_invoice"),
-      amount: z.number().positive().describe("The amount in sats (same as cashu_create_invoice)"),
+      amount: z.number().int().positive().max(100_000_000).describe("The amount in sats (same as cashu_create_invoice)"),
     },
     async ({ quoteId, amount }) =>
       withErrorHandler(async () => {

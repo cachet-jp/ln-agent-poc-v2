@@ -15,10 +15,25 @@ const optUrl = z.preprocess(
   z.string().url().optional(),
 );
 
+const optHexKey = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+  z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, "CASHU_STORE_KEY must be 64 hex characters (32 bytes), e.g. `openssl rand -hex 32`")
+    .optional(),
+);
+const optAbsPath = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+  z
+    .string()
+    .refine((p) => p.startsWith("/"), "must be an absolute path")
+    .optional(),
+);
+
 const configSchema = z.object({
   // Cashu ecash
   CASHU_MINT_URL: optUrl,
-  CASHU_STORE_KEY: optStr,
+  CASHU_STORE_KEY: optHexKey,
   CASHU_MAX_BALANCE_SATS: z.coerce.number().positive().default(1_000_000),
   CASHU_PREFERRED: z
     .enum(["true", "false"])
@@ -31,12 +46,26 @@ const configSchema = z.object({
   BITREFILL_API_KEY: optStr,
   BITREFILL_API_ID: optStr,
   BITREFILL_API_SECRET: optStr,
+  // Optional absolute path to the @bitrefill/cli binary. When set, the agent
+  // runs exactly this binary instead of resolving `bitrefill` from PATH —
+  // prevents a PATH-hijack from handing BITREFILL_API_KEY to a rogue binary.
+  BITREFILL_CLI_PATH: optAbsPath,
 
   // UseBitcoin.jp REST API
   USEBITCOIN_API_KEY: optStr,
   USEBITCOIN_API_BASE_URL: z
     .string()
     .url()
+    // Enforce https: the bearer API key is sent on every request, so a
+    // cleartext http:// override would leak it and an http target is the usual
+    // SSRF-to-internal-metadata vector. Self-hosted test servers must use https.
+    .refine((u) => {
+      try {
+        return new URL(u).protocol === "https:";
+      } catch {
+        return false;
+      }
+    }, "USEBITCOIN_API_BASE_URL must use https://")
     .default("https://usebitcoin.jp/api/v1"),
 
   // Guardrails

@@ -128,7 +128,7 @@ export function registerBitrefillTools(server: McpServer): void {
           .optional()
           .describe("Value/denomination for variable-price products"),
         packageId: z.string().optional().describe("Package ID for fixed-denomination products"),
-        quantity: z.number().int().positive().default(1).describe("Quantity (default 1)"),
+        quantity: z.number().int().positive().max(100).default(1).describe("Quantity (default 1)"),
         email: z.string().email().optional().describe("Email for delivery (some products require it)"),
       },
       async ({ productId, value, packageId, quantity, email }) =>
