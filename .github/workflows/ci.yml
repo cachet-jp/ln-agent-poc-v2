@@ -38,3 +38,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm test
+      # Surface known-vulnerable dependencies. Non-blocking for now: some highs
+      # are transitive through @modelcontextprotocol/sdk and off our runtime
+      # path; Dependabot opens the bumps. Tighten to a gate once clean.
+      - run: pnpm audit --audit-level=high
+        continue-on-error: true

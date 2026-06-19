@@ -42,12 +42,35 @@ export function hasBitrefillCredentials(): boolean {
 }
 
 /**
+ * Reject CLI argument *values* that could be reinterpreted as flags or smuggle
+ * control characters. execFile already prevents shell injection (no shell, args
+ * passed as an array), but a value like `--payment_method=...` on a money-moving
+ * command would still be parsed as an option by the CLI. IDs/queries can come
+ * from untrusted vendor JSON, so validate before they reach the CLI.
+ */
+function assertCliValue(name: string, value: string): string {
+  if (value.startsWith("-")) {
+    throw new Error(`Invalid ${name}: must not start with '-' (argument-injection guard)`);
+  }
+  if (/[\x00-\x1f]/.test(value)) {
+    throw new Error(`Invalid ${name}: contains control characters`);
+  }
+  return value;
+}
+
+/** Resolve the CLI binary: a configured absolute path, else PATH lookup. */
+function getCliBin(): string {
+  return getConfig().BITREFILL_CLI_PATH ?? "bitrefill";
+}
+
+/**
  * Run a bitrefill CLI command and return parsed output.
  */
 async function runCli(args: string[]): Promise<string> {
-  const { stdout, stderr } = await execFileAsync("bitrefill", args, {
+  const { stdout, stderr } = await execFileAsync(getCliBin(), args, {
     env: { ...process.env, BITREFILL_API_KEY: getApiKey() },
     timeout: 60_000,
+    maxBuffer: 10 * 1024 * 1024,
   });
   if (stderr && !stdout) {
     throw new Error(`Bitrefill CLI error: ${stderr}`);
@@ -85,9 +108,9 @@ export async function searchProducts(
   query: string,
   options: SearchOptions = {},
 ): Promise<BitrefillProduct[]> {
-  const args = ["search-products", "--query", query];
-  if (options.country) args.push("--country", options.country);
-  if (options.category) args.push("--category", options.category);
+  const args = ["search-products", "--query", assertCliValue("query", query)];
+  if (options.country) args.push("--country", assertCliValue("country", options.country));
+  if (options.category) args.push("--category", assertCliValue("category", options.category));
 
   const output = await runCli(args);
   // CLI outputs YAML-like format; parse product lines
@@ -116,7 +139,7 @@ export async function searchProducts(
 export async function getProductDetail(
   productId: string,
 ): Promise<BitrefillProductDetail> {
-  const output = await runCli(["get-product-details", "--product_id", productId]);
+  const output = await runCli(["get-product-details", "--product_id", assertCliValue("productId", productId)]);
   const parsed = parseCliOutput(output);
   return parsed as BitrefillProductDetail;
 }
@@ -141,6 +164,8 @@ export interface BuyOptions {
  * Returns the parsed JSON response with invoice_id and payment_info.
  */
 export async function buyProduct(options: BuyOptions): Promise<any> {
+  assertCliValue("productId", options.productId);
+  assertCliValue("packageId", String(options.packageId));
   const cartItem = JSON.stringify([{
     product_id: options.productId,
     package_id: options.packageId,
@@ -159,7 +184,7 @@ export async function buyProduct(options: BuyOptions): Promise<any> {
  * Get invoice status by ID via CLI.
  */
 export async function getInvoice(invoiceId: string): Promise<BitrefillInvoice> {
-  const output = await runCli(["get-invoice-by-id", "--invoice_id", invoiceId]);
+  const output = await runCli(["get-invoice-by-id", "--invoice_id", assertCliValue("invoiceId", invoiceId)]);
   const parsed = parseCliOutput(output);
   // Map CLI output fields to our type
   return {
@@ -185,7 +210,7 @@ export async function getOrders(): Promise<BitrefillOrder[]> {
  * Get order details by ID. Maps CLI output to our BitrefillOrder type.
  */
 export async function getOrder(orderId: string): Promise<BitrefillOrder> {
-  const output = await runCli(["get-invoice-by-id", "--invoice_id", orderId]);
+  const output = await runCli(["get-invoice-by-id", "--invoice_id", assertCliValue("orderId", orderId)]);
   const parsed = parseCliOutput(output);
   const order = parsed.orders?.[0];
   return {
