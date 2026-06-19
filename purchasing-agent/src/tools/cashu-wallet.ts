@@ -29,6 +29,11 @@ export function registerCashuTools(server: McpServer): void {
           total: formatSats(balance.total),
           proofCount: balance.proofCount,
           mintUrl: balance.mintUrl,
+          mints: balance.mints.map((m) => ({
+            mintUrl: m.mintUrl,
+            balance: formatSats(m.balance),
+            proofCount: m.proofCount,
+          })),
         };
       }),
   );
@@ -130,8 +135,11 @@ export function registerCashuTools(server: McpServer): void {
         return {
           success: true,
           amount: `${result.amount.toLocaleString()} sats`,
+          mintUrl: result.mintUrl,
           proofsReceived: result.proofs.length,
-          message: "Tokens received and added to your Cashu wallet.",
+          message:
+            `Tokens received from mint ${result.mintUrl} and added to your Cashu wallet. ` +
+            "They're ready to spend — no pre-configuration of the mint needed.",
         };
       }),
   );

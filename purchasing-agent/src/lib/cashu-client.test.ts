@@ -31,6 +31,14 @@ vi.mock("./cashu-store.js", () => ({
   removeProofs: async () => {},
   getTotalBalance: async (mint: string) =>
     (_memProofs.get(mint) ?? []).reduce((s, p) => s + p.amount, 0),
+  getMintBalances: async () =>
+    [..._memProofs.entries()]
+      .map(([mintUrl, proofs]) => ({
+        mintUrl,
+        balance: proofs.reduce((s, p) => s + p.amount, 0),
+        proofCount: proofs.length,
+      }))
+      .filter((m) => m.proofCount > 0),
   assertStoreReady: async () => {},
 }));
 
@@ -149,6 +157,46 @@ describe("cashu-client", () => {
     });
   });
 
+  describe("multi-mint support", () => {
+    it("aggregates balance across every held mint", async () => {
+      _memProofs.set("https://mint.test", [makeProof(100, "a")]);
+      _memProofs.set("https://other.test", [makeProof(50, "b"), makeProof(25, "c")]);
+
+      const { getCashuBalance } = await import("./cashu-client.js");
+      const bal = await getCashuBalance();
+      expect(bal.total).toBe(175);
+      expect(bal.proofCount).toBe(3);
+      expect(bal.mints).toHaveLength(2);
+    });
+
+    it("melts from a mint that can cover when the home mint cannot", async () => {
+      _memProofs.set("https://mint.test", [makeProof(100, "home-too-small")]);
+      _memProofs.set("https://rich.test", [makeProof(60_000, "rich")]);
+      _walletStubs.createMeltQuoteBolt11.mockResolvedValue({ amount: 50_000, fee_reserve: 100, quote: "q" });
+      _walletStubs.meltProofsBolt11.mockResolvedValue({
+        quote: { state: "PAID", payment_preimage: "pre" },
+        change: [],
+      });
+
+      const { meltTokens } = await import("./cashu-client.js");
+      const r = await meltTokens("lnbc500u1qpadding");
+      expect(r.paid).toBe(true);
+      expect(r.amount).toBe(50_000);
+      // home mint untouched, rich mint spent
+      expect(_memProofs.get("https://mint.test")).toHaveLength(1);
+    });
+
+    it("refuses when balances are split and no single mint can cover", async () => {
+      _memProofs.set("https://a.test", [makeProof(30_000, "a")]);
+      _memProofs.set("https://b.test", [makeProof(30_000, "b")]);
+      _walletStubs.createMeltQuoteBolt11.mockResolvedValue({ amount: 50_000, fee_reserve: 100, quote: "q" });
+
+      const { meltTokens } = await import("./cashu-client.js");
+      await expect(meltTokens("lnbc500u1qpadding")).rejects.toThrow(/No single mint can cover/);
+      expect(_walletStubs.meltProofsBolt11).not.toHaveBeenCalled();
+    });
+  });
+
   describe("sendTokens self-swap verification", () => {
     it("returns verified proofs and persists only keepProofs on success", async () => {
       const mint = "https://mint.test";
@@ -230,14 +278,29 @@ describe("cashu-client", () => {
       expect(cfg).toMatchObject({ requireDleq: true });
     });
 
-    it("rejects tokens from a different mint", async () => {
+    it("receives tokens from any mint and auto-associates the sender's mint", async () => {
+      const otherMint = "https://other-mint.test";
+      const token = JSON.stringify({ mint: otherMint, proofs: [makeProof(42, "in")] });
+      const incoming = [makeProof(42, "fresh-other")];
+      _walletStubs.receive.mockResolvedValue(incoming);
+
+      const { receiveTokens } = await import("./cashu-client.js");
+      const result = await receiveTokens(token);
+
+      // Stored under the token's own mint, ready to spend
+      expect(result.mintUrl).toBe(otherMint);
+      expect(result.amount).toBe(42);
+      expect(_memProofs.get(otherMint)).toEqual(incoming);
+    });
+
+    it("refuses a token whose mint URL is not https (SSRF guard)", async () => {
       const token = JSON.stringify({
-        mint: "https://other-mint.test",
-        proofs: [makeProof(42, "in")],
+        mint: "http://169.254.169.254",
+        proofs: [makeProof(1, "x")],
       });
 
       const { receiveTokens } = await import("./cashu-client.js");
-      await expect(receiveTokens(token)).rejects.toThrow(/Cross-mint receive/);
+      await expect(receiveTokens(token)).rejects.toThrow(/not https/);
       expect(_walletStubs.receive).not.toHaveBeenCalled();
     });
   });
