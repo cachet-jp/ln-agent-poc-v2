@@ -60,10 +60,19 @@ export function decodeBolt11Sats(bolt11: string): number {
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error(`bolt11 invoice has invalid amount value: ${amountPart}`);
   }
+  // Above 2^53 the double loses integer precision: distinct invoices can decode
+  // to the same Number, or round to exactly the expected amount, defeating the
+  // amount-match guard. No real Lightning payment needs this magnitude.
+  if (!Number.isSafeInteger(amount)) {
+    throw new Error(`bolt11 amount out of safe integer range: ${amountPart} — refusing to pay`);
+  }
 
   const sats = amount * unitSats;
   if (!Number.isInteger(sats)) {
     throw new Error(`bolt11 invoice encodes sub-satoshi amount (${sats} sats) — refusing to pay`);
+  }
+  if (!Number.isSafeInteger(sats)) {
+    throw new Error(`bolt11 sats amount out of safe integer range (${sats}) — refusing to pay`);
   }
   return sats;
 }

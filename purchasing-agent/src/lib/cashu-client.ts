@@ -9,6 +9,7 @@ import {
   type ProofState,
 } from "@cashu/cashu-ts";
 import { getCashuConfig } from "./cashu-config.js";
+import { getConfig } from "./config.js";
 import { renderBolt11Qr } from "./qr.js";
 import {
   loadProofs,
@@ -144,6 +145,18 @@ export async function meltTokens(bolt11: string): Promise<MeltResult> {
 
   // 1. Get melt quote (amount + fee estimate)
   const meltQuote = await wallet.createMeltQuoteBolt11(bolt11);
+
+  // Absolute spend ceiling: the mint-decoded quote amount is the real number of
+  // sats leaving the wallet. Gate it against MAX_SPEND_SATS here — the single
+  // money-exit point — so no caller (vendor-quoted or user-paste) can exceed it.
+  const { MAX_SPEND_SATS } = getConfig();
+  if (meltQuote.amount > MAX_SPEND_SATS) {
+    throw new Error(
+      `Payment of ${meltQuote.amount} sats exceeds MAX_SPEND_SATS (${MAX_SPEND_SATS}) — refusing to pay. ` +
+        `Raise MAX_SPEND_SATS to authorize larger single payments.`,
+    );
+  }
+
   const totalNeeded = meltQuote.amount + meltQuote.fee_reserve;
 
   // 2. Load and select proofs

@@ -480,6 +480,7 @@ V-Preca ギフト購入後、ギフトコード＋カード番号下4桁を Life
 | 変数 | 必須 | デフォルト | 説明 |
 |------|:----:|-----------|------|
 | `MAX_SPEND_JPY` | — | `5000` | 1 回の購入上限（JPY） |
+| `MAX_SPEND_SATS` | — | `100000` | 1 回の支払い上限（sats）。vendor 提示額に依らず melt チョークポイントで強制 |
 | `HEADLESS` | — | `true` | Playwright headless モード（V-Preca inquiry で利用） |
 
 ---

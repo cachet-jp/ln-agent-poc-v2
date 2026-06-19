@@ -485,6 +485,7 @@ After buying a V-Preca gift, submit the gift code and the last four card digits 
 | Variable | Required | Default | Description |
 |----------|:--------:|---------|-------------|
 | `MAX_SPEND_JPY` | — | `5000` | Single-purchase cap (JPY) |
+| `MAX_SPEND_SATS` | — | `100000` | Absolute per-payment cap (sats), enforced at the melt chokepoint regardless of vendor price |
 | `HEADLESS` | — | `true` | Run Playwright headless (used by V-Preca inquiry) |
 
 ---
