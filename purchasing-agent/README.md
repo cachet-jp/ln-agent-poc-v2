@@ -14,7 +14,8 @@ All purchases are paid from Cashu ecash via Lightning.
 
 **This software spends real money.** It autonomously pays Lightning invoices from a Cashu ecash balance and purchases non-refundable gift cards. Provided as-is under the MIT license, with no warranty of any kind — use at your own risk.
 
-- A bug, a misconfigured agent, or a compromised environment can irreversibly spend your funds. Keep only small amounts in the wallet and rely on the built-in guardrails (`MAX_SPEND_JPY`, `CASHU_MAX_BALANCE_SATS`).
+- **Keep only small amounts in the wallet.** A bug, a misconfigured agent, or a compromised environment can irreversibly spend your funds.
+- **Rely on the built-in guardrails** and tune them to your risk: `MAX_SPEND_JPY` (per gift-card purchase), `MAX_SPEND_SATS` (absolute per-payment cap, enforced at the Cashu melt step regardless of the vendor's quoted price), and `CASHU_MAX_BALANCE_SATS` (ceiling on ecash held).
 - Cashu ecash is bearer money held against a mint you must trust; if the mint disappears, the balance is gone.
 - Never commit or share `.env`, `data/`, or `storage-state/` — they contain spendable funds and private sessions.
 - To report a security issue, see [../SECURITY.md](../SECURITY.md).
@@ -81,7 +82,7 @@ Receive Cashu tokens → melt (mint pays Lightning on your behalf) → UseBitcoi
 **Required configuration**: `CASHU_MINT_URL` + `CASHU_STORE_KEY`
 
 **Funding options**:
-- Receive a `cashuB...` token string from another user or Cashu wallet
+- Receive a `cashuB...` token string from another user or Cashu wallet — the sender's mint is auto-detected and the ecash is immediately spendable, even from a mint you haven't pre-configured
 - Top up directly from any Lightning wallet (Phoenix, WoS, etc.) via `cashu_create_invoice`
 
 ---

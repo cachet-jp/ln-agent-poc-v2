@@ -14,7 +14,8 @@ Cashu ecash から Lightning 支払いで購入します。
 
 **本ソフトウェアは実際のお金を消費します。** Cashu ecash 残高から Lightning インボイスを自律的に支払い、返金不可のギフトカードを購入します。MIT ライセンスのもと現状有姿で提供され、いかなる保証もありません。自己責任でご利用ください。
 
-- バグ・エージェントの誤設定・実行環境の侵害により、資金が不可逆的に消費される可能性があります。ウォレットには少額のみを保持し、ガードレール（`MAX_SPEND_JPY`、`CASHU_MAX_BALANCE_SATS`）を活用してください。
+- **ウォレットには少額のみ。** バグ・エージェントの誤設定・実行環境の侵害で資金が不可逆的に消費されえます。
+- **組み込みのガードレールを活用**し、自分のリスクに合わせて調整してください：`MAX_SPEND_JPY`（ギフトカード1回の上限）、`MAX_SPEND_SATS`（vendor 提示額に依らず Cashu melt 時に強制する絶対上限）、`CASHU_MAX_BALANCE_SATS`（保有 ecash の上限）。
 - Cashu ecash は Mint への信頼を前提とするベアラーマネーです。Mint が消滅すると残高は失われます。
 - `.env`・`data/`・`storage-state/` には資金やセッション情報が含まれます。絶対にコミット・共有しないでください。
 - 脆弱性の報告は [../SECURITY.md](../SECURITY.md) を参照してください。
@@ -72,7 +73,7 @@ Cashu トークン受取 → melt（Mint が Lightning を代行） → UseBitco
 **必要な設定**: `CASHU_MINT_URL` + `CASHU_STORE_KEY` のみ
 
 **入金方法**:
-- 他のユーザーや Cashu ウォレットから `cashuB...` トークン文字列を受け取る
+- 他のユーザーや Cashu ウォレットから `cashuB...` トークン文字列を受け取る — 送り主の mint を自動検出し、事前設定していない mint でもそのまま使えます
 - Lightning ウォレット（Phoenix, WoS 等）から `cashu_create_invoice` で直接チャージ
 
 ---

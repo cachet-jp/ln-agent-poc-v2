@@ -17,6 +17,8 @@ import {
   saveProofs,
   removeProofs,
   getTotalBalance,
+  getMintBalances,
+  type MintBalance,
   assertStoreReady,
 } from "./cashu-store.js";
 
@@ -27,10 +29,12 @@ import {
 export interface CashuBalanceInfo {
   /** Total ecash balance in sats */
   total: number;
-  /** Number of proofs held */
+  /** Number of proofs held (across all mints) */
   proofCount: number;
-  /** Mint URL */
+  /** Primary mint URL (configured home mint, or the first held mint) */
   mintUrl: string;
+  /** Per-mint balance breakdown */
+  mints: MintBalance[];
 }
 
 export interface MeltResult {
@@ -51,6 +55,8 @@ export interface ReceiveResult {
   proofs: Proof[];
   /** Total amount received in sats */
   amount: number;
+  /** Mint the token (and the received proofs) belong to */
+  mintUrl: string;
 }
 
 export interface SendResult {
@@ -94,138 +100,187 @@ export interface MintInvoiceCheckResult {
 // Lazy singleton
 // ---------------------------------------------------------------------------
 
-let _wallet: Wallet | null = null;
+// One wallet per mint URL. Cashu proofs are mint-specific, so received ecash
+// from any sender's mint gets its own wallet and is immediately spendable.
+const _wallets = new Map<string, Wallet>();
 
-function getMintUrl(): string {
-  const cfg = getCashuConfig();
-  if (!cfg.CASHU_MINT_URL) {
-    throw new Error("CASHU_MINT_URL not configured. Set it in .env to use Cashu.");
-  }
-  return cfg.CASHU_MINT_URL;
+/** The configured "home" mint (used for top-ups), or undefined if unset. */
+function getConfiguredMintUrl(): string | undefined {
+  return getCashuConfig().CASHU_MINT_URL;
 }
 
-export async function getCashuWallet(): Promise<Wallet> {
-  if (!_wallet) {
-    const mintUrl = getMintUrl();
-    _wallet = new Wallet(mintUrl, { unit: "sat" });
-    await _wallet.loadMint();
+function getMintUrl(): string {
+  const url = getConfiguredMintUrl();
+  if (!url) {
+    throw new Error("CASHU_MINT_URL not configured. Set it in .env to use Cashu.");
   }
-  return _wallet;
+  return url;
+}
+
+export async function getCashuWallet(mintUrl: string = getMintUrl()): Promise<Wallet> {
+  let wallet = _wallets.get(mintUrl);
+  if (!wallet) {
+    wallet = new Wallet(mintUrl, { unit: "sat" });
+    await wallet.loadMint();
+    _wallets.set(mintUrl, wallet);
+  }
+  return wallet;
+}
+
+/**
+ * Order candidate mints for spending: the configured home mint first, then by
+ * balance descending. A single Cashu payment can only draw from one mint, so
+ * spends pick the first mint that can cover the amount.
+ */
+function orderMintsForSpend(balances: MintBalance[]): MintBalance[] {
+  const configured = getConfiguredMintUrl();
+  return [...balances].sort((a, b) => {
+    if (a.mintUrl === configured) return -1;
+    if (b.mintUrl === configured) return 1;
+    return b.balance - a.balance;
+  });
 }
 
 // ---------------------------------------------------------------------------
 // High-level operations
 // ---------------------------------------------------------------------------
 
-/** Get current Cashu ecash balance. */
+/** Get current Cashu ecash balance, aggregated across every held mint. */
 export async function getCashuBalance(): Promise<CashuBalanceInfo> {
-  const mintUrl = getMintUrl();
-  const proofs = await loadProofs(mintUrl);
-  const total = proofs.reduce((sum, p) => sum + p.amount, 0);
-  return {
-    total,
-    proofCount: proofs.length,
-    mintUrl,
-  };
+  const mints = await getMintBalances();
+  const total = mints.reduce((sum, m) => sum + m.balance, 0);
+  const proofCount = mints.reduce((sum, m) => sum + m.proofCount, 0);
+  const primary = getConfiguredMintUrl() ?? mints[0]?.mintUrl ?? "";
+  return { total, proofCount, mintUrl: primary, mints };
 }
 
 /**
  * Melt Cashu tokens to pay a Lightning invoice.
  *
- * Flow:
- * 1. Request melt quote (get fee estimate)
+ * A single Cashu payment can only draw from one mint, so we try mints in spend
+ * order (home mint first, then by balance) and pay from the first that can
+ * cover the invoice — making ecash received from any mint immediately usable.
+ *
+ * Per mint:
+ * 1. Request melt quote (amount + fee estimate)
  * 2. Select proofs to cover amount + fee_reserve
  * 3. Melt proofs (mint pays the Lightning invoice)
  * 4. Update stored proofs (remove spent, add change)
  */
 export async function meltTokens(bolt11: string): Promise<MeltResult> {
   await assertStoreReady();
-  const mintUrl = getMintUrl();
-  const wallet = await getCashuWallet();
-
-  // 1. Get melt quote (amount + fee estimate)
-  const meltQuote = await wallet.createMeltQuoteBolt11(bolt11);
-
-  // Absolute spend ceiling: the mint-decoded quote amount is the real number of
-  // sats leaving the wallet. Gate it against MAX_SPEND_SATS here — the single
-  // money-exit point — so no caller (vendor-quoted or user-paste) can exceed it.
   const { MAX_SPEND_SATS } = getConfig();
-  if (meltQuote.amount > MAX_SPEND_SATS) {
-    throw new Error(
-      `Payment of ${meltQuote.amount} sats exceeds MAX_SPEND_SATS (${MAX_SPEND_SATS}) — refusing to pay. ` +
-        `Raise MAX_SPEND_SATS to authorize larger single payments.`,
-    );
+
+  const candidates = orderMintsForSpend(await getMintBalances());
+  if (candidates.length === 0) {
+    throw new Error("No Cashu balance available to pay this invoice.");
   }
 
-  const totalNeeded = meltQuote.amount + meltQuote.fee_reserve;
+  let amountChecked = false;
+  let shortfall = "";
+  for (const cand of candidates) {
+    const wallet = await getCashuWallet(cand.mintUrl);
 
-  // 2. Load and select proofs
-  const allProofs = await loadProofs(mintUrl);
-  const totalAvailable = allProofs.reduce((sum, p) => sum + p.amount, 0);
-  if (totalAvailable < totalNeeded) {
-    throw new Error(
-      `Insufficient Cashu balance. Need ${totalNeeded} sats (${meltQuote.amount} + ${meltQuote.fee_reserve} fee), ` +
-        `have ${totalAvailable} sats.`,
+    // 1. Get melt quote (amount + fee estimate). The amount is the invoice's,
+    //    identical across mints; only fee_reserve differs.
+    const meltQuote = await wallet.createMeltQuoteBolt11(bolt11);
+
+    // Absolute spend ceiling: the mint-decoded quote amount is the real number
+    // of sats leaving the wallet. Gate it against MAX_SPEND_SATS — the single
+    // money-exit point — before paying. Check once (amount is mint-independent).
+    if (!amountChecked) {
+      if (meltQuote.amount > MAX_SPEND_SATS) {
+        throw new Error(
+          `Payment of ${meltQuote.amount} sats exceeds MAX_SPEND_SATS (${MAX_SPEND_SATS}) — refusing to pay. ` +
+            `Raise MAX_SPEND_SATS to authorize larger single payments.`,
+        );
+      }
+      amountChecked = true;
+    }
+
+    const totalNeeded = meltQuote.amount + meltQuote.fee_reserve;
+
+    // 2. Load and select proofs for this mint
+    const allProofs = await loadProofs(cand.mintUrl);
+    const totalAvailable = allProofs.reduce((sum, p) => sum + p.amount, 0);
+    if (totalAvailable < totalNeeded) {
+      shortfall = `mint ${cand.mintUrl}: need ${totalNeeded} sats, have ${totalAvailable}`;
+      continue; // try the next mint
+    }
+
+    const { send: proofsToSend, keep: proofsToKeep } = wallet.selectProofsToSend(
+      allProofs,
+      totalNeeded,
+      true, // includeFees
     );
+
+    // 3. Melt proofs — mint pays the Lightning invoice
+    const meltResult: MeltProofsResponse<MeltQuoteBolt11Response> =
+      await wallet.meltProofsBolt11(meltQuote, proofsToSend);
+
+    // 4. Update stored proofs: keep unselected proofs + change from overpaid fees
+    const remainingProofs = [...proofsToKeep, ...meltResult.change];
+    await saveProofs(cand.mintUrl, remainingProofs);
+
+    const actualFee = meltQuote.fee_reserve -
+      meltResult.change.reduce((sum, p) => sum + p.amount, 0);
+
+    return {
+      paid: meltResult.quote.state === "PAID",
+      preimage: meltResult.quote.payment_preimage,
+      amount: meltQuote.amount,
+      fee: actualFee,
+      change: meltResult.change,
+    };
   }
 
-  // Use wallet's proof selection
-  const { send: proofsToSend, keep: proofsToKeep } = wallet.selectProofsToSend(
-    allProofs,
-    totalNeeded,
-    true, // includeFees
+  const total = candidates.reduce((sum, m) => sum + m.balance, 0);
+  throw new Error(
+    `No single mint can cover this invoice — Cashu can't combine balances across mints in one payment ` +
+      `(total held: ${total} sats across ${candidates.length} mint(s); ${shortfall}). ` +
+      `Consolidate funds into one mint first.`,
   );
-
-  // 3. Melt proofs — mint pays the Lightning invoice
-  const meltResult: MeltProofsResponse<MeltQuoteBolt11Response> =
-    await wallet.meltProofsBolt11(meltQuote, proofsToSend);
-
-  // 4. Update stored proofs
-  // Keep unselected proofs + change from overpaid fees
-  const remainingProofs = [...proofsToKeep, ...meltResult.change];
-  await saveProofs(mintUrl, remainingProofs);
-
-  const actualFee = meltQuote.fee_reserve -
-    meltResult.change.reduce((sum, p) => sum + p.amount, 0);
-
-  return {
-    paid: meltResult.quote.state === "PAID",
-    preimage: meltResult.quote.payment_preimage,
-    amount: meltQuote.amount,
-    fee: actualFee,
-    change: meltResult.change,
-  };
 }
 
 /**
  * Receive external Cashu tokens (swap with mint for fresh proofs).
+ *
+ * The token's own mint is used and auto-associated: ecash from any sender's
+ * mint is accepted and stored under that mint, so it's immediately spendable
+ * without pre-configuring the mint. (You implicitly trust whatever mint the
+ * sender's ecash is held against — inherent to Cashu's bearer model.)
  */
 export async function receiveTokens(encodedToken: string): Promise<ReceiveResult> {
   await assertStoreReady();
-  const mintUrl = getMintUrl();
-  const wallet = await getCashuWallet();
 
-  // Decode to validate
+  // Decode to find the token's mint.
   const decoded = getDecodedToken(encodedToken);
-  if (decoded.mint !== mintUrl) {
-    throw new Error(
-      `Token is from mint ${decoded.mint}, but wallet is configured for ${mintUrl}. ` +
-        "Cross-mint receive is not supported.",
-    );
+  const mintUrl = decoded.mint;
+  if (!mintUrl) {
+    throw new Error("Cashu token does not specify a mint — cannot receive.");
+  }
+  // The mint URL is attacker-controlled (it comes from the token), and receiving
+  // fetches the mint's keys from it. Require https to avoid an http/internal-host
+  // SSRF on receive and to keep mint traffic encrypted.
+  if (!/^https:\/\//i.test(mintUrl)) {
+    throw new Error(`Refusing to receive: the token's mint URL is not https (${mintUrl}).`);
   }
 
-  // Swap with mint for fresh proofs. requireDleq asks the mint for DLEQ
+  const wallet = await getCashuWallet(mintUrl);
+
+  // Swap with the mint for fresh proofs. requireDleq asks the mint for DLEQ
   // proofs alongside blind signatures and rejects the token if any are
   // missing or invalid — catches tampered / malformed tokens before they
   // enter our store.
   const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
 
-  // Store fresh proofs
+  // Store fresh proofs under the token's mint.
   await addProofs(mintUrl, newProofs);
 
   return {
     proofs: newProofs,
     amount: newProofs.reduce((sum, p) => sum + p.amount, 0),
+    mintUrl,
   };
 }
 
@@ -244,16 +299,23 @@ export async function receiveTokens(encodedToken: string): Promise<ReceiveResult
  */
 export async function sendTokens(amountSats: number): Promise<SendResult> {
   await assertStoreReady();
-  const mintUrl = getMintUrl();
-  const wallet = await getCashuWallet();
 
-  const allProofs = await loadProofs(mintUrl);
-  const totalAvailable = allProofs.reduce((sum, p) => sum + p.amount, 0);
-  if (totalAvailable < amountSats) {
+  // A token is mint-specific, so send from one mint that can cover the amount
+  // (home mint first, then largest balance).
+  const candidates = orderMintsForSpend(await getMintBalances());
+  const chosen = candidates.find((m) => m.balance >= amountSats);
+  if (!chosen) {
+    const total = candidates.reduce((sum, m) => sum + m.balance, 0);
+    const largest = candidates[0]?.balance ?? 0;
     throw new Error(
-      `Insufficient balance. Need ${amountSats} sats, have ${totalAvailable} sats.`,
+      `Insufficient balance in any single mint. Need ${amountSats} sats; largest mint holds ${largest} ` +
+        `(total ${total} across ${candidates.length} mint(s)). Cashu tokens can't span mints.`,
     );
   }
+  const mintUrl = chosen.mintUrl;
+  const wallet = await getCashuWallet(mintUrl);
+
+  const allProofs = await loadProofs(mintUrl);
 
   // Split proofs: keep + send
   const { send: sendProofs, keep: keepProofs } = await wallet.send(
@@ -293,36 +355,38 @@ export async function sendTokens(amountSats: number): Promise<SendResult> {
 }
 
 /**
- * Check the state of stored proofs (unspent/spent/pending).
- * Removes any spent proofs from the store.
+ * Check the state of stored proofs (unspent/spent/pending) across every held
+ * mint. Removes any spent proofs from each mint's store.
  */
 export async function checkProofStates(): Promise<ProofStateResult[]> {
-  const mintUrl = getMintUrl();
-  const wallet = await getCashuWallet();
-  const allProofs = await loadProofs(mintUrl);
+  const mints = await getMintBalances();
+  const results: ProofStateResult[] = [];
 
-  if (allProofs.length === 0) {
-    return [];
-  }
+  for (const mint of mints) {
+    const wallet = await getCashuWallet(mint.mintUrl);
+    const allProofs = await loadProofs(mint.mintUrl);
+    if (allProofs.length === 0) {
+      continue;
+    }
 
-  const states: ProofState[] = await wallet.checkProofsStates(allProofs);
+    const states: ProofState[] = await wallet.checkProofsStates(allProofs);
 
-  // Build results
-  const results: ProofStateResult[] = states.map((s, i) => ({
-    secret: typeof allProofs[i].secret === "string"
-      ? allProofs[i].secret as string
-      : JSON.stringify(allProofs[i].secret),
-    state: s.state,
-    amount: allProofs[i].amount,
-  }));
+    const mintResults: ProofStateResult[] = states.map((s, i) => ({
+      secret: typeof allProofs[i].secret === "string"
+        ? allProofs[i].secret as string
+        : JSON.stringify(allProofs[i].secret),
+      state: s.state,
+      amount: allProofs[i].amount,
+    }));
+    results.push(...mintResults);
 
-  // Remove spent proofs from store
-  const spentSecrets = results
-    .filter((r) => r.state === CheckStateEnum.SPENT)
-    .map((r) => r.secret);
-
-  if (spentSecrets.length > 0) {
-    await removeProofs(mintUrl, spentSecrets);
+    // Remove this mint's spent proofs
+    const spentSecrets = mintResults
+      .filter((r) => r.state === CheckStateEnum.SPENT)
+      .map((r) => r.secret);
+    if (spentSecrets.length > 0) {
+      await removeProofs(mint.mintUrl, spentSecrets);
+    }
   }
 
   return results;

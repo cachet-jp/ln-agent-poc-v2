@@ -232,3 +232,21 @@ export async function getTotalBalance(mintUrl: string): Promise<number> {
   const proofs = await loadProofs(mintUrl);
   return proofs.reduce((sum, p) => sum + p.amount, 0);
 }
+
+export interface MintBalance {
+  mintUrl: string;
+  balance: number;
+  proofCount: number;
+}
+
+/** List every mint that currently holds proofs, with its balance. */
+export async function getMintBalances(): Promise<MintBalance[]> {
+  const data = await readStore();
+  return data
+    .map((d) => ({
+      mintUrl: d.mintUrl,
+      balance: d.proofs.reduce((sum, p) => sum + p.amount, 0),
+      proofCount: d.proofs.length,
+    }))
+    .filter((m) => m.proofCount > 0);
+}
