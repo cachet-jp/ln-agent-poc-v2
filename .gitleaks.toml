@@ -1,0 +1,11 @@
+# gitleaks config — auto-loaded by `gitleaks detect --source .` (see .github/workflows/ci.yml)
+[extend]
+useDefault = true
+
+# The UseBitcoin.jp API key is a publishable key: UseBitcoin manages no accounts,
+# so this single shared value is intentionally committed (README + .env.example).
+[allowlist]
+description = "UseBitcoin.jp shared public API key (publishable, intentionally committed)"
+regexes = [
+  '''c260bb8dfa012c8e2fe7d958b2e14abe''',
+]

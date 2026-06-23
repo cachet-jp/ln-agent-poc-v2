@@ -50,7 +50,7 @@ For everything else (Amazon vouchers, Google Play, Netflix, Steam, App Store, Ub
 
 ### UseBitcoin.jp (Japan-issued gift cards)
 
-Purchases go through the UseBitcoin official REST API (`/api/v1/invoices`, `/api/v1/orders/{id}`) and are paid over Lightning. `USEBITCOIN_API_KEY` is required.
+Purchases go through the UseBitcoin official REST API (`/api/v1/invoices`, `/api/v1/orders/{id}`) and are paid over Lightning. `USEBITCOIN_API_KEY` is required — a shared public key is bundled in `.env.example`, so `cp .env.example .env` is enough to start (no signup required).
 
 | Product | `product` | Denominations (JPY) | Usage |
 |---------|-----------|---------------------|-------|
@@ -137,7 +137,8 @@ MAX_SPEND_JPY=5000
 HEADLESS=true
 
 # UseBitcoin.jp REST API — required for usebitcoin_buy_* tools
-USEBITCOIN_API_KEY=<your UseBitcoin.jp API key>
+# Shared public key (no signup needed) — works out of the box
+USEBITCOIN_API_KEY=c260bb8dfa012c8e2fe7d958b2e14abe
 ```
 
 > Generate the encryption key: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
@@ -470,7 +471,7 @@ After buying a V-Preca gift, submit the gift code and the last four card digits 
 
 | Variable | Required | Default | Description |
 |----------|:--------:|---------|-------------|
-| `USEBITCOIN_API_KEY` | — | — | API key issued by UseBitcoin.jp |
+| `USEBITCOIN_API_KEY` | — | `c260bb8…` (shared) | Shared public key, no signup required |
 | `USEBITCOIN_API_BASE_URL` | — | `https://usebitcoin.jp/api/v1` | Override the API base URL |
 
 ### Bitrefill (required for Bitrefill purchases)
