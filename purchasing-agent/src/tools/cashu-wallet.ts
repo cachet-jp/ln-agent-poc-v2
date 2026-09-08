@@ -11,6 +11,7 @@ import {
   claimMintInvoice,
 } from "../lib/cashu-client.js";
 import { jsonResponse, errorResponse, withErrorHandler } from "../lib/tool-helpers.js";
+import { appendOrderLog, safeAppendOrderLog } from "../lib/order-log.js";
 import { renderTextQr } from "../lib/qr.js";
 
 const formatSats = (n: number) =>
@@ -48,7 +49,25 @@ export function registerCashuTools(server: McpServer): void {
     },
     async ({ bolt11 }) =>
       withErrorHandler(async () => {
+        // This is the path where an invoice created OUTSIDE this server (e.g.
+        // by the Bitrefill CLI) gets paid, so the bolt11 breadcrumb here is
+        // the only durable link back to that order. Written before the melt:
+        // if it can't be persisted, abort while aborting is still free.
+        await appendOrderLog({
+          provider: "cashu",
+          event: "melt_requested",
+          bolt11,
+        });
         const result = await meltTokens(bolt11);
+        await safeAppendOrderLog({
+          provider: "cashu",
+          event: "payment_sent",
+          bolt11,
+          satsPaid: result.amount,
+          feeSats: result.fee,
+          preimage: result.preimage ?? undefined,
+          status: result.paid ? "paid" : "unpaid",
+        });
         return {
           success: result.paid,
           amount: formatSats(result.amount),

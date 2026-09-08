@@ -12,6 +12,7 @@ import {
 } from "../lib/bitrefill-client.js";
 import { payBolt11 } from "../lib/payment-strategy.js";
 import { withErrorHandler } from "../lib/tool-helpers.js";
+import { appendOrderLog, safeAppendOrderLog } from "../lib/order-log.js";
 import type { BitrefillPurchaseResult } from "../types.js";
 
 /**
@@ -151,6 +152,17 @@ export function registerBitrefillTools(server: McpServer): void {
             throw new Error("Bitrefill did not return a Lightning invoice");
           }
 
+          // Persist the ids before any money moves; a write failure aborts
+          // the purchase while aborting is still free.
+          await appendOrderLog({
+            provider: "bitrefill",
+            event: "invoice_created",
+            invoiceId: invoice.id,
+            orderId: invoice.orderId,
+            productId,
+            satsQuoted: invoice.satoshiPrice,
+          });
+
           // 2. Pay the Lightning invoice via Cashu → Ark fallback.
           // Pass the vendor-quoted satoshiPrice so payBolt11 rejects any
           // bolt11 whose encoded amount doesn't match (catches MITM mutation
@@ -164,10 +176,45 @@ export function registerBitrefillTools(server: McpServer): void {
             throw new Error("Lightning payment failed — no preimage received");
           }
 
+          await safeAppendOrderLog({
+            provider: "bitrefill",
+            event: "payment_sent",
+            invoiceId: invoice.id,
+            orderId: invoice.orderId,
+            productId,
+            satsPaid: invoice.satoshiPrice,
+            feeSats: payResult.fee,
+            paymentMethod: payResult.method,
+            preimage: payResult.preimage,
+          });
+
           // 3. Wait for Bitrefill to acknowledge payment & fetch order in one pass
-          const { order } = await waitForInvoicePaid(invoice.id);
+          let order;
+          try {
+            ({ order } = await waitForInvoicePaid(invoice.id));
+          } catch (err) {
+            await safeAppendOrderLog({
+              provider: "bitrefill",
+              event: "delivery_pending",
+              invoiceId: invoice.id,
+              orderId: invoice.orderId,
+              productId,
+              note: (err as Error)?.message,
+            });
+            throw err;
+          }
           const orderId = order.id ?? invoice.orderId ?? "unknown";
           const firstItem = order.items?.[0];
+
+          await safeAppendOrderLog({
+            provider: "bitrefill",
+            event: "delivered",
+            invoiceId: invoice.id,
+            orderId,
+            productId,
+            productName: firstItem?.productName,
+            status: order.status,
+          });
 
           const result: BitrefillPurchaseResult = {
             provider: "bitrefill",

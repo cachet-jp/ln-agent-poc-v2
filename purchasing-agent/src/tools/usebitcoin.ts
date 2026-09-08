@@ -12,6 +12,7 @@ import {
   extractCodesFromOrder,
 } from "../lib/usebitcoin-api.js";
 import { VPRECA_TERMS_URL, VPRECA_TERMS_NOTICE } from "../lib/vpreca-constants.js";
+import { appendOrderLog, safeAppendOrderLog } from "../lib/order-log.js";
 import type {
   UseBitcoinProduct,
   ProductCatalog,
@@ -104,17 +105,65 @@ export async function buyGiftCard(
 
   const invoice = await createInvoice(sku, 1);
 
+  // Persist the order id before any money moves; a write failure aborts the
+  // purchase while aborting is still free.
+  await appendOrderLog({
+    provider: "usebitcoin",
+    event: "invoice_created",
+    orderId: invoice.order_id,
+    productId: sku,
+    satsQuoted: expectedSats,
+  });
+
   const payResult = await payBolt11(invoice.bolt11, "cashu", expectedSats);
   if (!payResult.preimage) {
     throw new Error("Lightning payment failed — no preimage received");
   }
 
-  const order = await pollOrderUntilComplete(invoice.order_id);
+  await safeAppendOrderLog({
+    provider: "usebitcoin",
+    event: "payment_sent",
+    orderId: invoice.order_id,
+    productId: sku,
+    satsPaid: payResult.amount,
+    feeSats: payResult.fee,
+    paymentMethod: payResult.method,
+    preimage: payResult.preimage,
+  });
+
+  let order;
+  try {
+    order = await pollOrderUntilComplete(invoice.order_id);
+  } catch (err) {
+    await safeAppendOrderLog({
+      provider: "usebitcoin",
+      event: "delivery_pending",
+      orderId: invoice.order_id,
+      productId: sku,
+      note: (err as Error)?.message,
+    });
+    throw err;
+  }
   if (order.status !== "fulfilled") {
+    await safeAppendOrderLog({
+      provider: "usebitcoin",
+      event: "delivery_pending",
+      orderId: invoice.order_id,
+      productId: sku,
+      status: order.status,
+    });
     throw new Error(
       `UseBitcoin order ${invoice.order_id} ended with status "${order.status}" (expected "fulfilled").`,
     );
   }
+
+  await safeAppendOrderLog({
+    provider: "usebitcoin",
+    event: "delivered",
+    orderId: invoice.order_id,
+    productId: sku,
+    status: order.status,
+  });
 
   const { code, secondaryCode } = extractCodesFromOrder(order);
 
@@ -257,6 +306,14 @@ export function registerUseBitcoinTools(server: McpServer): void {
 
         const sku = `${catalog.skuPrefix}-${amount}`;
         const invoice = await createInvoice(sku, 1);
+        // Manual-pay flow: no agent money moves here, so best-effort only.
+        await safeAppendOrderLog({
+          provider: "usebitcoin",
+          event: "invoice_created",
+          orderId: invoice.order_id,
+          productId: sku,
+          note: "manual pay (usebitcoin_create_invoice_qr)",
+        });
         const pngPath = join(tmpdir(), `usebitcoin-invoice-${invoice.order_id}.png`);
         const { base64 } = await renderBolt11Qr(invoice.bolt11, { pngPath });
 
