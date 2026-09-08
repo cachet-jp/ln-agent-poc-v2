@@ -22,7 +22,9 @@ const instructions = `Bitcoin Lightning でギフトカード等を購入する 
 - Bitrefill (世界 1,500+ ブランド): bitrefill_search / bitrefill_product_detail /
   bitrefill_categories / bitrefill_buy / bitrefill_order_status / bitrefill_account_balance
 - V-Preca: vpreca_open_inquiry_page（既定: 照会ページを既定ブラウザで開く） / vpreca_inquiry（opt-in: 規約同意を代行して照会）
-- 共通: render_qr (BOLT11 / Cashu トークン等を端末スキャン可能な QR に変換)
+- 共通: render_qr (BOLT11 / Cashu トークン等を端末スキャン可能な QR に変換) /
+  purchase_order_log (購入の invoice/order ID とステータスのローカル記録。再起動・
+  コンテキスト喪失後の注文復元はまずこれを呼ぶ)
 
 ## QR コードを user に見せたいとき
 ターミナルクライアントは MCP の image content を必ずしも inline 描画しない。
@@ -76,6 +78,11 @@ if (config.CASHU_MINT_URL) {
 {
   const { registerQrTools } = await import("./tools/qr.js");
   registerQrTools(server);
+}
+
+{
+  const { registerOrderLogTools } = await import("./tools/order-log.js");
+  registerOrderLogTools(server);
 }
 
 const transport = new StdioServerTransport();
