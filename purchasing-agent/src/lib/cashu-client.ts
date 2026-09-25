@@ -1,7 +1,8 @@
 import {
   Wallet,
   getEncodedToken,
-  getDecodedToken,
+  getTokenMetadata,
+  type Token as CashuToken,
   CheckStateEnum,
   type Proof,
   type MeltQuoteBolt11Response,
@@ -9,6 +10,7 @@ import {
   type ProofState,
 } from "@cashu/cashu-ts";
 import { getCashuConfig } from "./cashu-config.js";
+import { normalizeCashuTokenEncoding } from "./cashu-token-normalize.js";
 import { getConfig } from "./config.js";
 import { renderBolt11Qr } from "./qr.js";
 import {
@@ -253,9 +255,14 @@ export async function meltTokens(bolt11: string): Promise<MeltResult> {
 export async function receiveTokens(encodedToken: string): Promise<ReceiveResult> {
   await assertStoreReady();
 
-  // Decode to find the token's mint.
-  const decoded = getDecodedToken(encodedToken);
-  const mintUrl = decoded.mint;
+  // Some wallets (Minibits) emit cashuB tokens as indefinite-length CBOR,
+  // which cashu-ts 3.x rejects ("Unsupported length: 31") — re-frame first.
+  encodedToken = normalizeCashuTokenEncoding(encodedToken);
+
+  // Use getTokenMetadata to safely extract mint info without needing keysets.
+  // This handles both v1 (long keyset IDs) and v2 (short keyset IDs) tokens.
+  const meta = getTokenMetadata(encodedToken);
+  const mintUrl = meta.mint;
   if (!mintUrl) {
     throw new Error("Cashu token does not specify a mint — cannot receive.");
   }
@@ -268,11 +275,13 @@ export async function receiveTokens(encodedToken: string): Promise<ReceiveResult
 
   const wallet = await getCashuWallet(mintUrl);
 
-  // Swap with the mint for fresh proofs. requireDleq asks the mint for DLEQ
-  // proofs alongside blind signatures and rejects the token if any are
-  // missing or invalid — catches tampered / malformed tokens before they
-  // enter our store.
-  const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
+  // DLEQ (NUT-12) is optional — many wallets (e.g. Minibits) send tokens
+  // without it. Enforce it only when the token carries DLEQ data, so present
+  // ones are verified but bare tokens still work; either way the mint swap
+  // below rejects forged proofs before they enter our store.
+  const allHaveDleq =
+    meta.incompleteProofs.length > 0 && meta.incompleteProofs.every((p) => p.dleq);
+  const newProofs = await wallet.receive(encodedToken, { requireDleq: allHaveDleq });
 
   // Store fresh proofs under the token's mint.
   await addProofs(mintUrl, newProofs);
