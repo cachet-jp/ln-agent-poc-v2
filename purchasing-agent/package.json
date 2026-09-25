@@ -16,7 +16,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@cashu/cashu-ts": "3.6.1",
+    "@cashu/cashu-ts": "4.10.2",
     "@modelcontextprotocol/sdk": "1.27.1",
     "dotenv": "^16.4.7",
     "playwright": "^1.50.1",
