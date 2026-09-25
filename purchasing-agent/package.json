@@ -18,7 +18,7 @@
   "dependencies": {
     "@cashu/cashu-ts": "3.6.1",
     "@modelcontextprotocol/sdk": "1.27.1",
-    "dotenv": "^16.4.7",
+    "dotenv": "^18.0.2",
     "playwright": "^1.50.1",
     "qrcode": "^1.5.4",
     "zod": "^3.24.2"
