@@ -85,6 +85,18 @@ vi.mock("@cashu/cashu-ts", async (importOriginal) => {
       }
       return actual.getDecodedToken(input);
     },
+    getTokenMetadata: (input: string) => {
+      if (typeof input === "string" && input.startsWith("{")) {
+        const parsed = JSON.parse(input);
+        return {
+          unit: parsed.unit ?? "sat",
+          mint: parsed.mint,
+          amount: (parsed.proofs ?? []).reduce((s: number, p: Proof) => s + p.amount, 0),
+          incompleteProofs: parsed.proofs ?? [],
+        };
+      }
+      return actual.getTokenMetadata(input);
+    },
     getEncodedToken: (input: { mint: string; proofs: Proof[] }) =>
       JSON.stringify(input),
   };
@@ -263,7 +275,26 @@ describe("cashu-client", () => {
   });
 
   describe("receiveTokens DLEQ enforcement", () => {
-    it("passes requireDleq: true to wallet.receive", async () => {
+    it("passes requireDleq: true when every proof carries DLEQ data", async () => {
+      const mint = "https://mint.test";
+      const dleq = { e: "aa", s: "bb", r: "cc" };
+      const token = JSON.stringify({
+        mint,
+        proofs: [{ ...makeProof(42, "in"), dleq }],
+      });
+      const incoming = [makeProof(42, "fresh-1")];
+
+      _walletStubs.receive.mockResolvedValue(incoming);
+
+      const { receiveTokens } = await import("./cashu-client.js");
+      await receiveTokens(token);
+
+      expect(_walletStubs.receive).toHaveBeenCalledOnce();
+      const [, cfg] = _walletStubs.receive.mock.calls[0];
+      expect(cfg).toMatchObject({ requireDleq: true });
+    });
+
+    it("does not require DLEQ for tokens without it (NUT-12 is optional)", async () => {
       const mint = "https://mint.test";
       const token = JSON.stringify({ mint, proofs: [makeProof(42, "in")] });
       const incoming = [makeProof(42, "fresh-1")];
@@ -275,7 +306,7 @@ describe("cashu-client", () => {
 
       expect(_walletStubs.receive).toHaveBeenCalledOnce();
       const [, cfg] = _walletStubs.receive.mock.calls[0];
-      expect(cfg).toMatchObject({ requireDleq: true });
+      expect(cfg).toMatchObject({ requireDleq: false });
     });
 
     it("receives tokens from any mint and auto-associates the sender's mint", async () => {
