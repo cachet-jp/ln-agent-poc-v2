@@ -12,6 +12,7 @@ Bitcoin Lightning 決済で商品を購入する MCP エージェント。主要
 
 - `purchasing-agent/` — MCP サーバー本体。ツール実装・ウォレット連携・V-Preca 照会のブラウザ自動化すべて。
 - `.claude/commands/` — Claude Code の slash-command SKILL。`/cashu-purchase` `/auto-purchase` `/cashu-manage` `/bitrefill-purchase` `/vpreca-inquiry`。
+- `skills/` — Agent Skills 形式 (`SKILL.md` + frontmatter)。goose などがモデル側の判断で読む。現在 `vpreca-inquiry`。`~/.claude/skills/` と `~/.agents/skills/` から symlink して使う。`.claude/commands/` と内容が重複するものは両方直す。
 
 ## Common Commands
 
